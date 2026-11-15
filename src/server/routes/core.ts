@@ -361,7 +361,7 @@ export async function roleCardStatus(s: Scope) {
       `SELECT m.content FROM ai_messages m JOIN ai_threads t ON t.id=m.thread_id WHERE t.org_id=$1 AND t.owner_user_id=$2 AND t.role_key=$3 AND m.author='assistant' AND m.status='done' ORDER BY m.created_at DESC LIMIT 1`,
       [s.orgId, s.userId, role],
     );
-    out[role] = { newReports: 0, pendingReview: 0, running: (running?.n ?? 0) > 0, dataGap: null, lastMessage: last?.content?.split("\n").find((l) => l.trim() && !l.startsWith("[규칙"))?.slice(0, 80) ?? null };
+    out[role] = { newReports: 0, pendingReview: 0, running: (running?.n ?? 0) > 0, dataGap: null, lastMessage: last?.content?.split("\n").find((l) => l.trim() && !l.startsWith("[규칙") && !l.startsWith("질문 내용을"))?.replace(/^■\s*/, "").slice(0, 80) ?? null };
   }
   if (can(s, "view_analytics") && can(s, "view_finance")) {
     const r = await q1<{ n: number }>(`SELECT count(*) AS n FROM reports WHERE org_id=$1 AND status='new'`, [s.orgId]);

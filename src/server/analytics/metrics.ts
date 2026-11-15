@@ -147,16 +147,23 @@ export async function analyticsOverview(scope: Scope, period: Period) {
     params,
   );
 
-  // 단계별 도달 (stage_events 기준 — 현재 단계만이 아니라 한 번이라도 도달한 단계)
-  const funnel = await q(
-    `SELECT st AS stage, count(DISTINCT o.id) AS n
+  // 단계별 도달: 주 퍼널(신규→요구사항→견적→협의→계약)에서 '해당 단계 이상 도달'한 기회 수 (누적).
+  // 단계를 건너뛴 경우(예: 신규→견적)도 앞 단계를 통과한 것으로 본다. 되돌린 이벤트는 제외.
+  const reachedRows = await q<{ id: string; stages: string[] }>(
+    `SELECT o.id, array_agg(DISTINCT s.st) AS stages
      FROM opportunities o
-     JOIN LATERAL (SELECT DISTINCT to_stage AS st FROM stage_events se WHERE se.opportunity_id=o.id AND se.reverts_event_id IS NULL
+     JOIN LATERAL (SELECT to_stage AS st FROM stage_events se WHERE se.opportunity_id=o.id
+                     AND NOT EXISTS (SELECT 1 FROM stage_events r WHERE r.reverts_event_id=se.id)
                    UNION SELECT o.stage) s ON true
      WHERE ${acc} AND o.merged_into_id IS NULL AND o.opened_at >= ${ps} AND o.opened_at < ${pe} AND o.category='valid'
-     GROUP BY st`,
+     GROUP BY o.id`,
     params,
   );
+  const FUNNEL = ["new", "requirements", "quoted", "negotiating", "won"];
+  const funnel = FUNNEL.map((stage, i) => ({
+    stage,
+    n: reachedRows.filter((r) => Math.max(0, ...r.stages.map((st) => FUNNEL.indexOf(st))) >= i).length,
+  }));
 
   // 서비스 유형별 전환
   const conversionByService = await q(

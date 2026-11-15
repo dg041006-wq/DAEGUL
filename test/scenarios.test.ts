@@ -274,10 +274,46 @@ describe("지표 정의", () => {
     expect(a.body.counts.valid).toBeLessThan(msgCount!.n);
   });
 
+  it("단계별 전환은 누적(해당 단계 이상 도달) 기준이라 단조 감소한다", async () => {
+    const a = await api(ctx.app, ctx.ownerCookie).get("/api/analytics");
+    const ns = a.body.funnel.map((r: any) => r.n);
+    for (let i = 1; i < ns.length; i++) expect(ns[i]).toBeLessThanOrEqual(ns[i - 1]);
+    expect(ns[0]).toBe(a.body.counts.valid);
+  });
+
   it("계약 확정은 계약 기록 없이 단계만 바꿀 수 없다", async () => {
     const oppId = await oppOfConv("c-frt");
     const r = await api(ctx.app, ctx.ownerCookie).post(`/api/opportunities/${oppId}/stage`, { to: "won", reason: "대화상 확정 같음" });
     expect(r.status).toBe(400);
+  });
+});
+
+describe("과거 기록 가져오기", () => {
+  it("출처·기간이 기록되고 재가져오기 시 중복 저장되지 않으며 카카오 연동 상태는 바뀌지 않는다", async () => {
+    const owner = api(ctx.app, ctx.ownerCookie);
+    const body = {
+      source_label: "대표 보관 정리본",
+      conversations: [
+        {
+          external_conversation_id: "imp-1",
+          customer_id: "imp-cust",
+          messages: [
+            { id: "1", sender: "customer", text: "과거 문의", sent_at: "2026-09-03T10:12:00+09:00" },
+            { id: "2", sender: "staff", text: "답변", sent_at: "2026-09-03T10:40:00+09:00" },
+          ],
+        },
+      ],
+    };
+    const r1 = await owner.post("/api/imports", body);
+    expect(r1.status).toBe(200);
+    expect(r1.body.inserted).toBe(2);
+    const r2 = await owner.post("/api/imports", body);
+    expect(r2.body.inserted).toBe(0);
+    const imp = await q1<any>(`SELECT * FROM data_imports ORDER BY created_at LIMIT 1`);
+    expect(imp.source_label).toBe("대표 보관 정리본");
+    const home = await owner.get("/api/home");
+    expect(home.body.dataStatus.kakaoVerified).toBe(false);
+    expect((await api(ctx.app, ctx.staffCookie).post("/api/imports", body)).status).toBe(401); // 회수된 직원
   });
 });
 

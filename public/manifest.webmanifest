@@ -1,0 +1,12 @@
+{
+  "name": "STAYSCENE OFFICE",
+  "short_name": "STAYSCENE",
+  "description": "스테이신 내부 업무 앱",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f3ec",
+  "theme_color": "#f7f3ec",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
