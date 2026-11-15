@@ -1,12 +1,19 @@
 import { Link } from "react-router-dom";
-import { post } from "../lib/api";
+import { useOutletContext } from "react-router-dom";
 import { canDo, useSession } from "../lib/session";
 import { Icon } from "../components/Icon";
 
 export function More() {
-  const { me, refresh } = useSession();
+  const { me } = useSession();
+  const { logout } = useOutletContext<{ logout: () => Promise<void> }>();
   const items = [
-    { to: "/pipeline", label: "고객 / 영업 현황", icon: "flow", show: true },
+    { to: "/schedule", label: "일정 · 작업", icon: "calendar", show: true },
+    { to: "/contacts", label: "고객", icon: "user", show: true },
+    { to: "/settlement", label: "정산", icon: "won", show: canDo(me, "view_finance") },
+    { to: "/pipeline", label: "영업 현황", icon: "flow", show: true },
+    { to: "/ideas", label: "경영 제안", icon: "spark", show: canDo(me, "view_analytics") },
+    { to: "/search", label: "검색", icon: "search", show: true },
+    { to: "/install", label: "앱 설치 · 알림", icon: "bell", show: true },
     { to: "/analytics", label: "분석실", icon: "chart", show: canDo(me, "view_analytics") },
     { to: "/reports", label: "보고서", icon: "doc", show: canDo(me, "view_analytics") && canDo(me, "view_finance") },
     { to: "/notifications", label: "알림함", icon: "bell", show: true },
@@ -31,7 +38,7 @@ export function More() {
         <p className="small">
           {me?.user.name} · {me?.role === "owner" ? "대표" : "직원"} · {me?.user.email}
         </p>
-        <button className="btn" style={{ marginTop: 8 }} onClick={async () => (await post("/api/auth/logout"), refresh())}>
+        <button className="btn" style={{ marginTop: 8 }} onClick={logout}>
           로그아웃
         </button>
       </div>

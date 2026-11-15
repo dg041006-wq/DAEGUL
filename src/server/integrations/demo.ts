@@ -33,6 +33,21 @@ function header(h: VerifyInput["headers"], name: string) {
   return Array.isArray(v) ? v[0] : v;
 }
 
+export function makeHmacAdapter(key: string, secret: () => string, headerName: string): ProviderAdapter {
+  return {
+    ...demoAdapter,
+    key,
+    verify({ rawBody, headers }) {
+      const sec = secret();
+      if (!sec) return false;
+      const sig = header(headers, headerName);
+      if (!sig || !/^[0-9a-f]{64}$/.test(sig)) return false;
+      const expected = crypto.createHmac("sha256", sec).update(rawBody).digest("hex");
+      return crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
+    },
+  };
+}
+
 export const demoAdapter: ProviderAdapter = {
   key: "demo",
   implemented: true,

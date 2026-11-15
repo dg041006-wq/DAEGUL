@@ -214,7 +214,7 @@ describe("시나리오 8: AI 미연동/한도 도달", () => {
     expect(m!.n).toBe(1);
 
     const owner = api(ctx.app, ctx.ownerCookie);
-    const t = await owner.post("/api/ai/threads", { role_key: "cs", message: "오늘 답장 안 한 문의부터 보여줘" });
+    const t = await owner.post("/api/ai/threads", { role_key: "sales", message: "오늘 답장 안 한 문의부터 보여줘" });
     expect(t.status).toBe(200);
     await drainJobs();
     const th = await owner.get(`/api/ai/threads/${t.body.id}`);

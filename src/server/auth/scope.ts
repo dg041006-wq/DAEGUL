@@ -54,3 +54,25 @@ export function opportunityAccessSql(s: Scope, alias: string, params: unknown[])
     SELECT 1 FROM opportunity_conversations oc JOIN conversations cc ON cc.id = oc.conversation_id
     WHERE oc.opportunity_id = ${alias}.id AND cc.assignee_user_id = ${u}))`;
 }
+
+/** 작업(프로젝트) 접근: 전체 조회 권한, 담당자 본인, 또는 본인 배정 상담과 연결된 고객의 작업 */
+export function projectAccessSql(s: Scope, alias: string, params: unknown[]): string {
+  params.push(s.orgId);
+  const org = `${alias}.org_id = $${params.length}`;
+  if (can(s, "view_all_conversations")) return org;
+  params.push(s.userId);
+  const u = `$${params.length}`;
+  return `${org} AND (${alias}.assignee_user_id = ${u} OR EXISTS (
+    SELECT 1 FROM conversations cc WHERE cc.contact_id = ${alias}.contact_id AND cc.assignee_user_id = ${u}))`;
+}
+
+/** 고객 접근: 전체 조회 권한 또는 본인 배정 상담/작업이 있는 고객 */
+export function contactAccessSql(s: Scope, alias: string, params: unknown[]): string {
+  params.push(s.orgId);
+  const org = `${alias}.org_id = $${params.length}`;
+  if (can(s, "view_all_conversations")) return org;
+  params.push(s.userId);
+  const u = `$${params.length}`;
+  return `${org} AND (EXISTS (SELECT 1 FROM conversations cc WHERE cc.contact_id=${alias}.id AND cc.assignee_user_id=${u})
+    OR EXISTS (SELECT 1 FROM projects pp WHERE pp.contact_id=${alias}.id AND pp.assignee_user_id=${u}))`;
+}

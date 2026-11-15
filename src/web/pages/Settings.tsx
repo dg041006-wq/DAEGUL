@@ -6,10 +6,15 @@ import { fmtDateTime } from "../lib/format";
 import { Empty, ErrorBox, IntegrationBadge, Loading, useToast } from "../components/common";
 import { StaffAvatar } from "../components/StaffAvatar";
 import { KNOWLEDGE_KINDS, STAFF_PERMS, STAFF_PERM_LABELS } from "../../shared/domain";
+import { ActivityLog, AlertSettings, AutoReplies, SheetImport } from "./SettingsExtra";
 
 const TABS = [
   ["members", "구성원·권한"],
-  ["ops", "영업시간·알림·보고"],
+  ["sheet", "시트 가져오기"],
+  ["alerts", "보고·알림·푸시"],
+  ["ops", "영업시간"],
+  ["autoreply", "자동응답"],
+  ["activity", "활동 이력"],
   ["knowledge", "승인 자료"],
   ["staff", "AI 직원"],
   ["integrations", "연동 상태"],
@@ -53,6 +58,10 @@ export function Settings() {
       </div>
       {tab === "members" && <Members />}
       {tab === "ops" && <Ops />}
+      {tab === "sheet" && <SheetImport />}
+      {tab === "alerts" && <AlertSettings />}
+      {tab === "autoreply" && <AutoReplies />}
+      {tab === "activity" && <ActivityLog />}
       {tab === "knowledge" && <Knowledge />}
       {tab === "staff" && <StaffSettings />}
       {tab === "integrations" && <Integrations />}
@@ -229,8 +238,8 @@ function Ops() {
   if (!v) return <Loading />;
   const save = async () => {
     try {
-      const { businessHours, replyAlertMinutes, quoteFollowupBusinessDays, reports } = v;
-      await patch("/api/settings", { businessHours, replyAlertMinutes, quoteFollowupBusinessDays, reports });
+      const { businessHours, replyAlertMinutes, quoteFollowupBusinessDays } = v;
+      await patch("/api/settings", { businessHours, replyAlertMinutes, quoteFollowupBusinessDays });
       toast.show("저장했습니다.");
     } catch (e: any) {
       toast.show(e.message);
@@ -273,25 +282,7 @@ function Ops() {
           <span className="tiny">기준 경과 시 '후속 확인' 할 일만 생성합니다. 이탈로 자동 확정하지 않습니다.</span>
         </label>
       </div>
-      <h2 style={{ marginTop: 10 }}>정기 내부 보고</h2>
-      <label className="check">
-        <input type="checkbox" checked={v.reports.dailyEnabled} onChange={(e) => setV({ ...v, reports: { ...v.reports, dailyEnabled: e.target.checked } })} />
-        일간 보고
-        <input type="time" value={v.reports.dailyTime} onChange={(e) => setV({ ...v, reports: { ...v.reports, dailyTime: e.target.value } })} style={{ width: "auto" }} />
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={v.reports.weeklyEnabled} onChange={(e) => setV({ ...v, reports: { ...v.reports, weeklyEnabled: e.target.checked } })} />
-        주간 보고
-        <select value={v.reports.weeklyDay} onChange={(e) => setV({ ...v, reports: { ...v.reports, weeklyDay: Number(e.target.value) } })} style={{ width: "auto" }}>
-          {DAYS.map((d, i) => (
-            <option key={i} value={i}>
-              {d}요일
-            </option>
-          ))}
-        </select>
-        <input type="time" value={v.reports.weeklyTime} onChange={(e) => setV({ ...v, reports: { ...v.reports, weeklyTime: e.target.value } })} style={{ width: "auto" }} />
-      </label>
-      <p className="tiny muted">보고는 백그라운드 워커가 실행 중일 때 생성됩니다.</p>
+
       <button className="btn primary" style={{ alignSelf: "flex-start" }} onClick={save}>
         저장
       </button>
@@ -400,7 +391,7 @@ function StaffSettings() {
 }
 
 function RoleEditor({ r, onSave }: { r: any; onSave: (b: any) => void }) {
-  const [v, setV] = useState({ display_name: r.display_name, title: r.title, suit_color: r.suit_color, hair: r.appearance?.hair ?? "short", instructions: r.instructions });
+  const [v, setV] = useState({ display_name: r.display_name, title: r.title, suit_color: r.suit_color, hair: r.appearance?.hair ?? "wave", instructions: r.instructions });
   return (
     <form
       className="card stack"
@@ -410,7 +401,7 @@ function RoleEditor({ r, onSave }: { r: any; onSave: (b: any) => void }) {
       }}
     >
       <div style={{ display: "grid", placeItems: "center" }}>
-        <StaffAvatar suit={v.suit_color} hair={v.hair} size={96} />
+        <StaffAvatar suit={v.suit_color} hair={v.hair} accent={r.appearance?.accent} size={96} />
       </div>
       <label className="field">
         <span>이름</span>
@@ -428,11 +419,11 @@ function RoleEditor({ r, onSave }: { r: any; onSave: (b: any) => void }) {
         <label className="field">
           <span>헤어</span>
           <select value={v.hair} onChange={(e) => setV({ ...v, hair: e.target.value })}>
-            <option value="short">짧은 머리</option>
-            <option value="crop">크롭</option>
-            <option value="side">옆 가르마</option>
+            <option value="wave">웨이브 롱</option>
+            <option value="long">스트레이트 롱</option>
             <option value="bob">단발</option>
-            <option value="long">긴 머리</option>
+            <option value="updo">업스타일</option>
+            <option value="ponytail">포니테일</option>
           </select>
         </label>
       </div>
@@ -574,6 +565,30 @@ function AiUsage() {
           ))}
         </tbody>
       </table>
+      <p className="small">
+        최근 성공 호출: {d.lastSuccess ? `${fmtDateTime(d.lastSuccess.finished_at)} (${d.lastSuccess.model})` : "없음"} · 호출 상한 시간당 {d.hourlyCallCap}회 / 하루 {d.dailyCallCap}회
+      </p>
+      {d.errors?.length > 0 && (
+        <table className="t">
+          <thead>
+            <tr>
+              <th>최근 30일 오류</th>
+              <th>건수</th>
+              <th>마지막</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.errors.map((e: any) => (
+              <tr key={e.error_kind ?? "x"}>
+                <td>{({ auth: "인증 실패(키 확인)", billing: "크레딧/결제", permission: "권한 없음", rate_limit: "요청 한도", overloaded: "서버 혼잡", network: "연결 실패", refusal: "정책상 거절", invalid: "잘못된 요청", server: "API 서버 오류", other: "기타" } as any)[e.error_kind] ?? e.error_kind ?? "미분류"}</td>
+                <td>{e.n}</td>
+                <td>{fmtDateTime(e.last_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="tiny muted">{d.billingNote}</p>
       <form
         className="row"
         onSubmit={async (e) => {

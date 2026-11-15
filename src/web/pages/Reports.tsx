@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { post, useApi } from "../lib/api";
-import { daysAgoKst, fmtDate, fmtDateTime, todayKst } from "../lib/format";
+import { fmtDate, fmtDateTime } from "../lib/format";
 import { BackLink, Empty, ErrorBox, Loading, useToast } from "../components/common";
 
 export function Reports() {
   const list = useApi<any[]>("/api/reports", { poll: 30000 });
   const nav = useNavigate();
-  const [from, setFrom] = useState(daysAgoKst(7));
-  const [to, setTo] = useState(daysAgoKst(1));
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   return (
@@ -16,29 +14,44 @@ export function Reports() {
       <div className="page-head">
         <div>
           <h1>보고서</h1>
-          <p className="muted small">정기 보고 일정은 설정 → 알림·보고에서 켭니다. 집계는 DB, 해석은 AI(연동 시).</p>
+          <p className="muted small">일일 보고 매일 오후 7:00, 주간 보고 금요일 오후 7:10 (한국 시간) 서버에서 자동 생성. 테스트 실행 보고는 [테스트]로 분리됩니다.</p>
         </div>
-        <form
-          className="row"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            try {
-              const r = await post("/api/reports", { from, to });
-              nav(`/reports/${r.id}`);
-            } catch (err: any) {
-              toast.show(err.message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <input type="date" aria-label="시작일" value={from} max={todayKst()} onChange={(e) => setFrom(e.target.value)} style={{ width: "auto" }} />
-          <input type="date" aria-label="종료일" value={to} max={todayKst()} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} />
-          <button className="btn primary" disabled={busy}>
-            {busy ? "작성 중…" : "수시 보고 만들기"}
+        <div className="row">
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const r = await post("/api/reports/test-run", { kind: "daily" });
+                nav(`/reports/${r.id}`);
+              } catch (err: any) {
+                toast.show(err.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            일일 보고 테스트 실행
           </button>
-        </form>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const r = await post("/api/reports/test-run", { kind: "weekly" });
+                nav(`/reports/${r.id}`);
+              } catch (err: any) {
+                toast.show(err.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            주간 보고 테스트 실행
+          </button>
+        </div>
       </div>
       <div className="card">
         {list.loading ? (
@@ -51,10 +64,12 @@ export function Reports() {
           list.data!.map((r) => (
             <Link key={r.id} to={`/reports/${r.id}`} className="list-item">
               {r.status === "new" && <span className="badge brass">새 보고</span>}
+              {r.is_test && <span className="badge">테스트</span>}
+              <span className="badge navy">{{ daily: "일일", weekly: "주간", adhoc: "수시" }[r.kind as string]}</span>
               <div style={{ flex: 1 }}>
                 <b>{r.title}</b>
                 <div className="tiny muted">
-                  대상 {r.target_count}건 · 동기화 {fmtDateTime(r.data_synced_at)} · 작성 {fmtDateTime(r.created_at)}
+                  기준 시각 {fmtDateTime(r.cutoff_at ?? r.period_end)} · 대상 {r.target_count}건 · 작성 {fmtDateTime(r.created_at)}
                 </div>
               </div>
             </Link>
@@ -79,7 +94,7 @@ export function ReportDetail() {
         <div>
           <h1>{d.title}</h1>
           <p className="muted small">
-            분석 기간 {fmtDate(d.period_start)} ~ {fmtDate(new Date(new Date(d.period_end).getTime() - 1).toISOString())} · 대상 {d.target_count}건 · 최신 동기화 {fmtDateTime(d.data_synced_at)}
+            집계 구간 {fmtDateTime(d.period_start)} ~ {fmtDateTime(d.period_end)} · 데이터 기준 시각 {fmtDateTime(d.cutoff_at ?? d.period_end)} · 대상 {d.target_count}건 · 최신 수신 {fmtDateTime(d.data_synced_at)}
           </p>
         </div>
         {d.status === "new" && (
@@ -88,7 +103,7 @@ export function ReportDetail() {
           </button>
         )}
       </div>
-      {d.metrics?.sampleData && <div className="banner warn">샘플 데이터 / 카카오 미연동 — 실제 문의 분석 결과가 아닙니다.</div>}
+      {d.is_test && <div className="banner info">테스트 실행 보고입니다. 운영 보고와 별도로 저장되며 일정 보고 중복 판단에 영향을 주지 않습니다.</div>}
       <div className="card">
         <div className="pre">{d.body}</div>
       </div>
@@ -97,17 +112,10 @@ export function ReportDetail() {
           <h2>다음 행동</h2>
           <ul>
             {d.next_actions.map((a: any, i: number) => (
-              <li key={i}>{a.title}</li>
+              <li key={i}>{a.link ? <Link to={a.link}>{a.title}</Link> : a.title}</li>
             ))}
           </ul>
-          <div className="row">
-            <Link className="btn sm" to="/inbox?filter=awaiting">
-              답변 대기 상담
-            </Link>
-            <Link className="btn sm" to="/pipeline?stage=quoted">
-              견적 후 회신 대기
-            </Link>
-          </div>
+
         </div>
       )}
       <p className="tiny muted" style={{ marginTop: 10 }}>

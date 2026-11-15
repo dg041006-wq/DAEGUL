@@ -27,7 +27,11 @@ export function Notifications() {
               {!x.read_at && <span className="status-dot live" style={{ marginTop: 7 }} />}
               <div>
                 <div>{x.title}</div>
-                <div className="tiny muted">{fmtDateTime(x.created_at)}</div>
+                <div className="tiny muted">
+                  {fmtDateTime(x.created_at)}
+                  {x.severity && x.severity !== "info" && ` · ${x.severity === "critical" ? "긴급" : "중요"}`}
+                  {x.push_status && x.push_status !== "not_required" && ` · 푸시 ${({ sent: "전송됨", failed: "실패", no_subscription: "구독 기기 없음", pending: "대기" } as any)[x.push_status] ?? x.push_status}`}
+                </div>
               </div>
             </Link>
           ))

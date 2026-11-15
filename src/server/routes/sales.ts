@@ -8,7 +8,8 @@ import { analyticsOverview, financeOverview } from "../analytics/metrics.js";
 import { resolvePeriod } from "../lib/time.js";
 import { audit } from "../lib/audit.js";
 import { getAccessibleConversation, getAccessibleOpportunity } from "./core.js";
-import { generateReport } from "../jobs/automation.js";
+import { runTestReport } from "../jobs/reports.js";
+import { recordEvent } from "../lib/events.js";
 import { CATEGORIES, LOSS_REASONS, SERVICE_TYPES, STAGES } from "../../shared/domain.js";
 
 export async function applyStageChange(s: Scope, oppId: string, to: string, reason: string, evidenceMessageIds: string[], actorType: "user" | "ai" = "user") {
@@ -28,6 +29,10 @@ export async function applyStageChange(s: Scope, oppId: string, to: string, reas
     );
   });
   await audit({ orgId: s.orgId, actorUserId: s.userId, action: "opportunity.stage", targetType: "opportunity", targetId: o.id, detail: { from: o.stage, to, reason, via: actorType } });
+  if (to === "lost" && o.data_origin !== "sample")
+    await recordEvent(s.orgId, { kind: "cancelled", title: `문의 종료/이탈 처리: ${o.title ?? "문의 건"}`, dedupeKey: `lost:${o.id}:${Date.now()}`, entityType: "opportunity", entityId: o.id, link: `/pipeline/${o.id}`, isTest: o.data_origin === "test" });
+  else if (o.data_origin !== "sample")
+    await recordEvent(s.orgId, { kind: "status_change", title: `단계 변경: ${o.title ?? "문의 건"} → ${to}`, dedupeKey: `stage:${o.id}:${to}:${Date.now()}`, entityType: "opportunity", entityId: o.id, link: `/pipeline/${o.id}`, isTest: o.data_origin === "test" });
 }
 
 export async function salesRoutes(app: FastifyInstance) {
@@ -112,8 +117,11 @@ export async function salesRoutes(app: FastifyInstance) {
         next_action: z.string().max(300).nullable().optional(),
         next_action_due: z.string().datetime({ offset: true }).nullable().optional(),
         owner_user_id: z.string().uuid().nullable().optional(),
+        version: z.number().int().optional(),
       })
       .parse(req.body);
+    if (body.version !== undefined && body.version !== o.version) throw Object.assign(new Error("다른 기기에서 먼저 수정되었습니다. 최신 내용을 불러온 뒤 다시 시도하세요."), { status: 409 });
+    delete (body as any).version;
     if (body.source_channel && !body.source_evidence && !o.source_evidence) throw Object.assign(new Error("유입경로는 근거(고객 답변·캠페인 식별정보)와 함께 입력해야 합니다."), { status: 400 });
     if (body.owner_user_id !== undefined && body.owner_user_id !== s.userId && !can(s, "view_all_conversations")) throw new ForbiddenError();
     const keys = Object.keys(body) as Array<keyof typeof body>;
@@ -128,7 +136,7 @@ export async function salesRoutes(app: FastifyInstance) {
     }
     vals.push(JSON.stringify(fe));
     sets.push(`field_evidence=$${vals.length}`);
-    await q(`UPDATE opportunities SET ${sets.join(", ")}, updated_at=now() WHERE id=$1`, vals);
+    await q(`UPDATE opportunities SET ${sets.join(", ")}, version=version+1, updated_at=now() WHERE id=$1`, vals);
     await audit({ orgId: s.orgId, actorUserId: s.userId, action: "opportunity.update", targetType: "opportunity", targetId: o.id, detail: { fields: keys } });
     return { ok: true };
   });
@@ -193,6 +201,17 @@ export async function salesRoutes(app: FastifyInstance) {
     ]);
     await applyStageChange(s, o.id, "won", `계약 기록 등록 (${body.channel})`, []);
     await audit({ orgId: s.orgId, actorUserId: s.userId, action: "contract.create", targetType: "opportunity", targetId: o.id });
+    await recordEvent(s.orgId, {
+      kind: "contract_confirmed",
+      title: `계약 확정: ${o.title ?? "문의 건"}${body.amount != null ? ` · ${body.amount.toLocaleString("ko-KR")}원` : ""} (담당자 등록 계약 기록)`,
+      dedupeKey: `contract:${r.id}`,
+      entityType: "opportunity",
+      entityId: o.id,
+      link: `/pipeline/${o.id}`,
+      isTest: o.data_origin === "test",
+      feedText: `대표님, 계약이 확정됐습니다. ${o.title ?? "문의 건"}${body.amount != null ? ` · ${body.amount.toLocaleString("ko-KR")}원` : ""} (근거: ${body.evidence.slice(0, 60)})`,
+      actions: [{ label: "문의 건 열기", type: "open", link: `/pipeline/${o.id}` }, { label: "작업 일정 만들기", type: "open", link: `/projects/new?opportunity=${o.id}` }],
+    });
     return r;
   });
 
@@ -210,6 +229,7 @@ export async function salesRoutes(app: FastifyInstance) {
     const body = z.object({ amount: z.number().int().positive(), paid_at: z.string().datetime({ offset: true }), note: z.string().max(300).optional() }).parse(req.body);
     const r = await q1(`INSERT INTO payments(org_id, contract_id, amount, paid_at, note, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [s.orgId, k.id, body.amount, body.paid_at, body.note ?? null, s.userId]);
     await audit({ orgId: s.orgId, actorUserId: s.userId, action: "payment.create", targetType: "contract", targetId: k.id });
+    await recordEvent(s.orgId, { kind: "payment_confirmed", title: `입금 확인: ${body.amount.toLocaleString("ko-KR")}원 (담당자 확인 기록)`, dedupeKey: `payment:${r.id}`, entityType: "opportunity", entityId: k.opportunity_id, link: `/pipeline/${k.opportunity_id}` });
     return r;
   });
 
@@ -370,7 +390,7 @@ export async function salesRoutes(app: FastifyInstance) {
   }
   app.get("/api/reports", async (req) => {
     const s = scopeOf(req);
-    const rows = await q<any>(`SELECT id, role_key, kind, title, period_start, period_end, target_count, data_synced_at, status, required_perms, created_at FROM reports WHERE org_id=$1 ORDER BY created_at DESC LIMIT 100`, [s.orgId]);
+    const rows = await q<any>(`SELECT id, role_key, kind, title, period_start, period_end, target_count, data_synced_at, status, required_perms, created_at, is_test, cutoff_at, period_key FROM reports WHERE org_id=$1 ORDER BY created_at DESC LIMIT 100`, [s.orgId]);
     return rows.filter((r) => reportVisible(s, r.required_perms));
   });
   app.get("/api/reports/:id", async (req) => {
@@ -380,13 +400,13 @@ export async function salesRoutes(app: FastifyInstance) {
     const run = r.analysis_run_id ? await q1(`SELECT model, prompt_version, engine, created_at, knowledge_version_ids FROM analysis_runs WHERE id=$1`, [r.analysis_run_id]) : null;
     return { ...r, run };
   });
-  app.post("/api/reports", async (req) => {
+  // 테스트 실행: 실제 예약 시각을 기다리지 않고 같은 생성 경로로 만들되 운영 보고와 분리(is_test)
+  app.post("/api/reports/test-run", async (req) => {
     const s = scopeOf(req);
     requirePerm(s, "view_analytics");
     requirePerm(s, "view_finance");
-    const body = z.object({ from: z.string(), to: z.string() }).parse(req.body);
-    const p = resolvePeriod(body.from, body.to);
-    const id = await generateReport(s.orgId, "adhoc", p.from, p.to, s.userId);
+    const body = z.object({ kind: z.enum(["daily", "weekly"]) }).parse(req.body);
+    const id = await runTestReport(s.orgId, body.kind, s.userId);
     return { id };
   });
   app.post("/api/reports/:id/reviewed", async (req) => {

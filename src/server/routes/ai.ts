@@ -13,7 +13,7 @@ import { roleCardStatus } from "./core.js";
 export async function aiRoutes(app: FastifyInstance) {
   app.get("/api/ai/roles", async (req) => {
     const s = scopeOf(req);
-    const roles = await q(`SELECT role_key, display_name, title, suit_color, appearance, instructions, updated_at FROM ai_roles WHERE org_id=$1 ORDER BY CASE role_key WHEN 'marketing' THEN 1 WHEN 'cs' THEN 2 ELSE 3 END`, [s.orgId]);
+    const roles = await q(`SELECT role_key, display_name, title, suit_color, appearance, instructions, updated_at FROM ai_roles WHERE org_id=$1 ORDER BY CASE role_key WHEN 'ops' THEN 1 WHEN 'sales' THEN 2 ELSE 3 END`, [s.orgId]);
     const status = await roleCardStatus(s);
     const avail = await checkAvailability(s.orgId);
     return { roles, status, ai: avail.ok ? { available: true } : { available: false, reason: avail.reason, message: avail.message } };
@@ -22,13 +22,13 @@ export async function aiRoutes(app: FastifyInstance) {
   app.patch("/api/ai/roles/:key", async (req) => {
     const s = scopeOf(req);
     requireOwner(s);
-    const key = z.enum(["marketing", "cs", "strategy"]).parse((req.params as any).key);
+    const key = z.enum(["ops", "sales", "strategy"]).parse((req.params as any).key);
     const body = z
       .object({
         display_name: z.string().min(1).max(30).optional(),
         title: z.string().min(1).max(30).optional(),
         suit_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-        appearance: z.object({ hair: z.enum(["short", "bob", "side", "long", "crop"]).optional(), accent: z.string().max(20).optional() }).optional(),
+        appearance: z.object({ hair: z.enum(["wave", "bob", "updo", "long", "ponytail"]).optional(), accent: z.string().max(20).optional() }).optional(),
         instructions: z.string().min(10).max(3000).optional(),
       })
       .parse(req.body);
@@ -44,16 +44,16 @@ export async function aiRoutes(app: FastifyInstance) {
   // 스레드는 본인 것만 (AI 대화는 요청자 권한 범위 안에서 생성되므로 공유하지 않음)
   app.get("/api/ai/threads", async (req) => {
     const s = scopeOf(req);
-    const qs = z.object({ role: z.enum(["marketing", "cs", "strategy", "meeting"]).optional() }).parse(req.query);
+    const qs = z.object({ role: z.enum(["ops", "sales", "strategy", "meeting"]).optional() }).parse(req.query);
     return q(
-      `SELECT id, role_key, title, created_at, updated_at FROM ai_threads WHERE org_id=$1 AND owner_user_id=$2 ${qs.role ? "AND role_key=$3" : ""} ORDER BY updated_at DESC LIMIT 50`,
+      `SELECT id, role_key, title, kind, created_at, updated_at FROM ai_threads WHERE org_id=$1 AND owner_user_id=$2 ${qs.role ? "AND role_key=$3" : ""} ORDER BY (kind='feed') DESC, updated_at DESC LIMIT 50`,
       qs.role ? [s.orgId, s.userId, qs.role] : [s.orgId, s.userId],
     );
   });
 
   app.post("/api/ai/threads", async (req) => {
     const s = scopeOf(req);
-    const body = z.object({ role_key: z.enum(["marketing", "cs", "strategy", "meeting"]), title: z.string().max(100).optional(), message: z.string().min(1).max(4000) }).parse(req.body);
+    const body = z.object({ role_key: z.enum(["ops", "sales", "strategy", "meeting"]), title: z.string().max(100).optional(), message: z.string().min(1).max(4000) }).parse(req.body);
     const t = await q1<{ id: string }>(`INSERT INTO ai_threads(org_id, role_key, owner_user_id, title) VALUES ($1,$2,$3,$4) RETURNING id`, [
       s.orgId,
       body.role_key,
@@ -66,10 +66,10 @@ export async function aiRoutes(app: FastifyInstance) {
 
   app.get("/api/ai/threads/:id", async (req) => {
     const s = scopeOf(req);
-    const t = await q1(`SELECT id, role_key, title, created_at FROM ai_threads WHERE id=$1 AND org_id=$2 AND owner_user_id=$3`, [(req.params as any).id, s.orgId, s.userId]);
+    const t = await q1(`SELECT id, role_key, title, kind, created_at FROM ai_threads WHERE id=$1 AND org_id=$2 AND owner_user_id=$3`, [(req.params as any).id, s.orgId, s.userId]);
     if (!t) throw new NotFoundError();
     const messages = await q(
-      `SELECT m.id, m.author, m.status, m.content, m.customer_draft, m.next_actions, m.meta, m.created_at, r.model, r.prompt_version, r.engine
+      `SELECT m.id, m.author, m.status, m.kind, m.actions, m.content, m.customer_draft, m.next_actions, m.meta, m.created_at, r.model, r.prompt_version, r.engine, r.error_kind
        FROM ai_messages m LEFT JOIN analysis_runs r ON r.id=m.analysis_run_id WHERE m.thread_id=$1 ORDER BY m.created_at`,
       [t.id],
     );
@@ -94,7 +94,17 @@ export async function aiRoutes(app: FastifyInstance) {
        FROM analysis_runs WHERE org_id=$1 AND created_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul' GROUP BY kind, engine ORDER BY cost DESC`,
       [s.orgId],
     );
+    const errors = await q(
+      `SELECT error_kind, count(*) AS n, max(finished_at) AS last_at FROM analysis_runs WHERE org_id=$1 AND status='failed' AND created_at > now() - interval '30 days' GROUP BY error_kind ORDER BY n DESC`,
+      [s.orgId],
+    );
+    const lastOk = await q1(`SELECT finished_at, model FROM analysis_runs WHERE org_id=$1 AND engine='model' AND status='done' ORDER BY finished_at DESC LIMIT 1`, [s.orgId]);
     return {
+      errors,
+      lastSuccess: lastOk,
+      dailyCallCap: settings.aiDailyCallCap,
+      hourlyCallCap: settings.aiHourlyCallCap,
+      billingNote: "실제 청구 금액은 앱에서 확인할 수 없습니다(결제 API 미연동). Claude Console의 Usage/Billing에서 확인하세요.",
       model: config.ai.model,
       configured: config.ai.enabled,
       priceInputPerMTok: config.ai.priceInputPerMTok,

@@ -108,6 +108,11 @@ export async function adminRoutes(app: FastifyInstance) {
         reports: z.object({ dailyEnabled: z.boolean(), dailyTime: hm, weeklyEnabled: z.boolean(), weeklyDay: z.number().int().min(0).max(6), weeklyTime: hm }).optional(),
         aiMonthlyBudgetUsd: z.number().min(0).max(100000).optional(),
         retentionDays: z.number().int().min(30).max(3650).nullable().optional(),
+        aiDailyCallCap: z.number().int().min(0).max(5000).optional(),
+        aiHourlyCallCap: z.number().int().min(0).max(1000).optional(),
+        pushMinSeverity: z.enum(["critical", "important", "info", "off"]).optional(),
+        eventPush: z.record(z.enum(["critical", "important", "info"])).optional(),
+        awaitingAlertRepeatHours: z.number().int().min(1).max(48).optional(),
       })
       .strict()
       .parse(req.body);
@@ -250,6 +255,11 @@ export async function adminRoutes(app: FastifyInstance) {
     requireOwner(s);
     const r = await tx(async (c) => {
       await q(`DELETE FROM tasks WHERE org_id=$1 AND (conversation_id IN (SELECT id FROM conversations WHERE org_id=$1 AND is_sample) OR opportunity_id IN (SELECT id FROM opportunities WHERE org_id=$1 AND is_sample))`, [s.orgId], c);
+      await q(`DELETE FROM ai_messages WHERE thread_id IN (SELECT id FROM ai_threads WHERE org_id=$1)`, [s.orgId], c);
+      await q(`DELETE FROM ai_threads WHERE org_id=$1`, [s.orgId], c);
+      await q(`DELETE FROM reports WHERE org_id=$1`, [s.orgId], c);
+      await q(`DELETE FROM events WHERE org_id=$1`, [s.orgId], c);
+      await q(`DELETE FROM notifications WHERE org_id=$1`, [s.orgId], c);
       await q(`UPDATE opportunities SET merged_into_id=NULL, duplicate_of_candidate=NULL WHERE org_id=$1 AND is_sample`, [s.orgId], c);
       const o = await q(`DELETE FROM opportunities WHERE org_id=$1 AND is_sample RETURNING id`, [s.orgId], c);
       const cv = await q(`DELETE FROM conversations WHERE org_id=$1 AND is_sample RETURNING id`, [s.orgId], c);

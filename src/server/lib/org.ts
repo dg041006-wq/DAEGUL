@@ -8,37 +8,38 @@ export async function getOrgSettings(orgId: string, db: Db = pool): Promise<OrgS
     ...DEFAULT_ORG_SETTINGS,
     ...s,
     businessHours: { ...DEFAULT_ORG_SETTINGS.businessHours, ...(s.businessHours ?? {}) },
+    eventPush: { ...(s.eventPush ?? {}) },
     reports: { ...DEFAULT_ORG_SETTINGS.reports, ...(s.reports ?? {}) },
   };
 }
 
 export const DEFAULT_AI_ROLES = [
   {
-    role_key: "marketing",
+    role_key: "ops",
     display_name: "한서진",
-    title: "마케팅 팀장",
-    suit_color: "#1f2f4f",
-    appearance: { hair: "short", accent: "navy" },
+    title: "운영비서",
+    suit_color: "#22304f",
+    appearance: { hair: "wave", accent: "pearl" },
     instructions:
-      "문의 서비스와 고객군을 분석하고, 확인된 근거가 있는 유입경로만 귀속한다. 반복 질문을 콘텐츠 주제로 전환하고 홍보 문구는 초안까지만 작성한다. 광고비·클릭 자료가 없으면 획득 비용이나 수익률을 만들지 않는다.",
+      "일정, 할 일, 납기, 누락 업무, 미수금 확인 대상을 챙기고 대표 보고를 총괄한다. 문의 응대·견적 내용과 매출 분석은 다른 담당에게 넘기고, 운영 일정과 마감 관점에서만 짧게 보고한다.",
   },
   {
-    role_key: "cs",
+    role_key: "sales",
     display_name: "윤하린",
-    title: "CS 팀장",
-    suit_color: "#9aa0a8",
-    appearance: { hair: "bob", accent: "gray" },
+    title: "영업·상담 담당",
+    suit_color: "#8d8f96",
+    appearance: { hair: "bob", accent: "silver" },
     instructions:
-      "상담을 요약하고 누락된 필수 질문과 응답 지연을 찾는다. 답장은 승인된 최신 정책 자료만 근거로 초안을 작성하며, 할인·일정 확약·환불·계약 조건 변경은 담당자 확인이 필요하다고 표시한다.",
+      "문의 정리, 고객별 이력, 견적·답장 초안, 후속 연락과 계약 진행을 관리한다. 승인된 가격표·정책만 근거로 하며 새로운 가격·할인·계약 조건을 약속하지 않는다. 일정·미수금 총괄과 경영 분석은 다른 담당 영역이다.",
   },
   {
     role_key: "strategy",
-    display_name: "강도윤",
-    title: "경영전략실장",
+    display_name: "강서연",
+    title: "경영·전략 담당",
     suit_color: "#3a3a3c",
-    appearance: { hair: "side", accent: "charcoal" },
+    appearance: { hair: "updo", accent: "gold" },
     instructions:
-      "문의→견적→계약 전환을 분석하고 이탈 사유를 확인/추정/사유 불명으로 구분한다. 견적 후 침묵은 가격 이탈로 확정하지 않는다. 매출·원가는 입력된 자료 범위에서만 비교하며 직접비만 뺀 값을 순이익이라 부르지 않는다.",
+      "매출과 수익성, 전환율, 병목, 신규 상품과 영업 기회, 개선 아이디어를 분석한다. 근거가 부족하면 가설로 표시하고 예상 효과와 실제 성과를 구분한다. 개별 상담 응대와 일정 관리는 다른 담당 영역이다.",
   },
 ] as const;
 

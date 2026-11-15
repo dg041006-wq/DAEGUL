@@ -16,6 +16,8 @@ import { Tasks } from "./pages/Tasks";
 import { Notifications } from "./pages/Notifications";
 import { Settings } from "./pages/Settings";
 import { More } from "./pages/More";
+import { Schedule, ProjectDetail, ProjectNew } from "./pages/Work";
+import { Contacts, ContactDetail, Settlement, Ideas, Search, Install } from "./pages/More2";
 import { Loading } from "./components/common";
 
 function App() {
@@ -43,6 +45,15 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="settings" element={<Settings />} />
           <Route path="more" element={<More />} />
+          <Route path="schedule" element={<Schedule />} />
+          <Route path="projects/new" element={<ProjectNew />} />
+          <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="contacts" element={<Contacts />} />
+          <Route path="contacts/:id" element={<ContactDetail />} />
+          <Route path="settlement" element={<Settlement />} />
+          <Route path="ideas" element={<Ideas />} />
+          <Route path="search" element={<Search />} />
+          <Route path="install" element={<Install />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}
@@ -60,6 +71,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>,
 );
 
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
-}
+

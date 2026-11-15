@@ -13,11 +13,14 @@ export const config = {
   appBaseUrl: process.env.APP_BASE_URL ?? "http://localhost:5173",
   ai: {
     // 키 값 자체는 ai/client.ts에서만 SDK가 환경변수로 읽는다.
-    enabled: Boolean(process.env.ANTHROPIC_API_KEY),
-    model: process.env.AI_MODEL || "claude-opus-5-5",
+    get enabled() {
+      return Boolean(process.env.ANTHROPIC_API_KEY);
+    },
+    get model() {
+      return process.env.AI_MODEL || "claude-opus-5-5";
+    },
     priceInputPerMTok: num(process.env.AI_PRICE_INPUT_PER_MTOK, 4),
     priceOutputPerMTok: num(process.env.AI_PRICE_OUTPUT_PER_MTOK, 20),
-    serverFallback: (process.env.AI_SERVER_FALLBACK ?? "true") !== "false",
   },
   demoWebhookSecret: process.env.DEMO_WEBHOOK_SECRET ?? "",
   get isProd() {

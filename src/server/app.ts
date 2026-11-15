@@ -13,6 +13,7 @@ import { salesRoutes } from "./routes/sales.js";
 import { aiRoutes } from "./routes/ai.js";
 import { adminRoutes } from "./routes/admin.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { opsRoutes } from "./routes/ops.js";
 
 import "./auth/request.js";
 
@@ -46,6 +47,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     const s = await resolveSession(req.cookies[SESSION_COOKIE]);
     if (s) req.scope = s.scope;
   });
+  // 민감한 상담 데이터가 브라우저/프록시 캐시에 남지 않도록
+  app.addHook("onSend", async (req, reply, payload) => {
+    if (req.url.startsWith("/api/") && !reply.getHeader("cache-control")) reply.header("cache-control", "no-store");
+    return payload;
+  });
 
   app.setErrorHandler((err: any, _req: FastifyRequest, reply: FastifyReply) => {
     if (err instanceof ZodError) return reply.code(400).send({ error: "입력값을 확인해 주세요.", issues: err.issues.map((i) => i.path.join(".") + ": " + i.message) });
@@ -63,6 +69,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(aiRoutes);
   await app.register(adminRoutes);
   await app.register(webhookRoutes);
+  await app.register(opsRoutes);
 
   app.get("/api/health", async () => ({ ok: true }));
 

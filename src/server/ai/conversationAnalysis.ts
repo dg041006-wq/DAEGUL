@@ -2,7 +2,8 @@
 // AI가 영업 단계/계약 확정을 바꾸지 않는다(후보만 제안). 사람이 입력한 값은 덮어쓰지 않는다.
 import { q, q1 } from "../db/pool.js";
 import { SERVICE_TYPES } from "../../shared/domain.js";
-import { addEvidence, checkAvailability, createMessage, finishRun, startRun, SYSTEM_DATA_RULE, textOf } from "./client.js";
+import { addEvidence, checkAvailability, classifyAiError, createMessage, finishRun, startRun, SYSTEM_DATA_RULE, textOf } from "./client.js";
+import { conversationAccessSql, type Scope } from "../auth/scope.js";
 import { maskPII } from "./mask.js";
 
 export const ANALYSIS_PROMPT_VERSION = "conv-analysis-v1";
@@ -71,7 +72,7 @@ export async function analyzeConversation(payload: { orgId: string; conversation
 
   // 증분: 이전 요약 + 그 이후 새 메시지만 전송
   const newMsgs = await q<any>(
-    `SELECT id, sender_type, sent_at, body FROM messages WHERE conversation_id=$1 AND ($2::timestamptz IS NULL OR sent_at > $2) ORDER BY sent_at, id LIMIT 150`,
+    `SELECT id, sender_type, sent_at, left(body, 1500) AS body FROM messages WHERE conversation_id=$1 AND ($2::timestamptz IS NULL OR sent_at > $2) ORDER BY sent_at, id LIMIT 60`,
     [conv.id, conv.ai_summary_through],
   );
   if (!newMsgs.length) {
@@ -101,7 +102,6 @@ ${SYSTEM_DATA_RULE}`;
 ${newMsgs.map((m) => `[message_id=${m.id}] [${m.sender_type}] ${new Date(m.sent_at).toISOString()} ${maskPII(m.body)}`).join("\n")}
 </customer_data>`;
     const res = await createMessage({ system, messages: [{ role: "user", content: user }], outputSchema: OUTPUT_SCHEMA, effort: "low", maxTokens: 8000 });
-    if (res.stop_reason === "refusal") throw new Error("model refusal");
     const out = JSON.parse(textOf(res));
     const validIds = new Set(newMsgs.map((m) => m.id));
     const evidence: Array<{ messageId: string; note: string }> = [];
@@ -152,24 +152,34 @@ ${newMsgs.map((m) => `[message_id=${m.id}] [${m.sender_type}] ${new Date(m.sent_
     );
     await finishRun(runId, { status: "done", inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens });
   } catch (e: any) {
-    await finishRun(runId, { status: "failed", error: String(e?.message ?? e).slice(0, 300) });
+    const c = classifyAiError(e);
+    await finishRun(runId, { status: "failed", error: c.message, errorKind: c.kind });
     await q(`UPDATE conversations SET ai_status='failed' WHERE id=$1`, [conv.id]);
-    throw e;
+    // 일시 장애만 재시도(큐). 인증·잔액·권한·정책 거절은 재시도하지 않음
+    if (["rate_limit", "overloaded", "network", "server"].includes(c.kind)) throw e;
   }
 }
 
 /** 답장 초안 — 승인된 최신 지식만 근거. 초안은 approvals(reply_draft)로 저장되며 자동 발송하지 않는다. */
-export async function draftReply(orgId: string, conversationId: string, requestedBy: string) {
+export async function draftReply(orgId: string, conversationId: string, requestedBy: string, scope?: Scope) {
+  if (scope) {
+    const params: unknown[] = [];
+    const acc = conversationAccessSql(scope, "c", params);
+    params.push(conversationId);
+    const ok = await q1(`SELECT 1 FROM conversations c WHERE ${acc} AND c.id::text=$${params.length}`, params);
+    if (!ok) return { ok: false as const, message: "상담 접근 권한이 없습니다." };
+  }
   const avail = await checkAvailability(orgId);
   if (!avail.ok) return { ok: false as const, message: avail.message };
   const knowledge = await q<any>(
     `SELECT DISTINCT ON (kind) id, kind, version, title, content FROM knowledge_versions WHERE org_id=$1 AND status='approved' ORDER BY kind, version DESC`,
     [orgId],
   );
-  const msgs = await q<any>(`SELECT id, sender_type, sent_at, body FROM messages WHERE conversation_id=$1 ORDER BY sent_at DESC, id DESC LIMIT 40`, [conversationId]);
+  // 데이터 최소화: 최근 20개 메시지, 메시지당 800자, 연락처 마스킹
+  const msgs = await q<any>(`SELECT id, sender_type, sent_at, left(body, 800) AS body FROM messages WHERE conversation_id=$1 ORDER BY sent_at DESC, id DESC LIMIT 20`, [conversationId]);
   msgs.reverse();
   const conv = await q1<any>(`SELECT ai_summary FROM conversations WHERE id=$1`, [conversationId]);
-  const runId = await startRun({ orgId, kind: "reply_draft", roleKey: "cs", engine: "model", promptVersion: "reply-draft-v1", knowledgeVersionIds: knowledge.map((k) => k.id), requestedBy, scope: { conversation_id: conversationId } });
+  const runId = await startRun({ orgId, kind: "reply_draft", roleKey: "sales", engine: "model", promptVersion: "reply-draft-v2", knowledgeVersionIds: knowledge.map((k) => k.id), requestedBy, scope: { conversation_id: conversationId } });
   try {
     const system = `당신은 스테이신 CS 팀장(AI)입니다. 고객에게 보낼 답장 '초안'을 작성합니다. 직원이 검토 후 공급사 상담 화면에서 직접 발송합니다.
 - 아래 <approved_knowledge>의 승인 문서만 근거로 한다. 승인 문서에 없는 금액·할인·일정·환불·계약 조건은 쓰지 말고 "담당자가 확인 후 안내드리겠습니다" 식으로 처리한다.
@@ -186,7 +196,6 @@ ${msgs.map((m) => `[${m.sender_type}] ${maskPII(m.body)}`).join("\n")}
 </customer_data>
 위 상담의 마지막 고객 메시지에 대한 답장 초안을 작성하세요.`;
     const res = await createMessage({ system, messages: [{ role: "user", content: user }], effort: "low", maxTokens: 4000 });
-    if (res.stop_reason === "refusal") throw new Error("model refusal");
     const draft = textOf(res);
     const a = await q1<{ id: string }>(
       `INSERT INTO approvals(org_id, kind, conversation_id, payload, requested_by_type, requested_by, analysis_run_id)
@@ -196,7 +205,8 @@ ${msgs.map((m) => `[${m.sender_type}] ${maskPII(m.body)}`).join("\n")}
     await finishRun(runId, { status: "done", inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens });
     return { ok: true as const, approvalId: a!.id, body: draft, knowledgeCount: knowledge.length };
   } catch (e: any) {
-    await finishRun(runId, { status: "failed", error: String(e?.message ?? e).slice(0, 300) });
-    return { ok: false as const, message: "초안 생성 중 오류가 발생했습니다." };
+    const c = classifyAiError(e);
+    await finishRun(runId, { status: "failed", error: c.message, errorKind: c.kind });
+    return { ok: false as const, message: `초안 생성 실패: ${c.message}` };
   }
 }

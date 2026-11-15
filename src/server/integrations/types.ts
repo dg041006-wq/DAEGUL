@@ -50,6 +50,8 @@ export interface ProviderAdapter {
   normalize(payload: unknown): NormalizedEvent[];
   /** 내역 보충(백필) — 공급사가 지원할 때만 */
   backfill?: (args: { since: Date }) => Promise<NormalizedEvent[]>;
-  /** 고객 발송 — 공급사 지원 + 실제 발송 검증 후에만 활성화 */
-  send?: undefined;
+  /** 고객 발송 — 공급사 지원 + 실제 발송 검증 후에만 구현. 결과를 모르면 'unknown'(자동 재발송 금지) */
+  send?: (m: { conversationExternalId: string; body: string; idempotencyKey: string; isTest: boolean }) => Promise<{ status: "sent" | "failed" | "unknown"; providerMessageId?: string; error?: string }>;
+  /** 'unknown' 발송의 실제 상태 확인 */
+  getSendStatus?: (m: { idempotencyKey: string; providerMessageId: string | null }) => Promise<{ status: "sent" | "failed" | "unknown"; providerMessageId?: string }>;
 }

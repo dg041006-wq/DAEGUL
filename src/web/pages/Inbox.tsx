@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { del, patch, post, useApi } from "../lib/api";
 import { canDo, useSession } from "../lib/session";
 import { fmtDateTime, fmtRelative, fmtTime } from "../lib/format";
-import { CategoryBadge, DataBanner, Empty, ErrorBox, Loading, SampleTag, StageBadge, useToast } from "../components/common";
+import { CategoryBadge, DataBanner, Empty, ErrorBox, Loading, Modal, SampleTag, StageBadge, useToast } from "../components/common";
 import { SERVICE_TYPES, STAGES, STAGE_LABELS } from "../../shared/domain";
 import { Icon } from "../components/Icon";
 
@@ -27,6 +27,8 @@ export function Inbox() {
   const list = useApi<any[]>(`/api/conversations?${qs}`, { poll: 15000 });
   const home = useApi<any>("/api/home", { poll: 60000 });
   const [showInfo, setShowInfo] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const navTo = useNavigate();
   const setParam = (k: string, v: string) => {
     const n = new URLSearchParams(sp);
     if (v) n.set(k, v);
@@ -38,9 +40,23 @@ export function Inbox() {
       <div className="page-head">
         <div>
           <h1>상담함</h1>
-          <p className="muted small">읽기·분석·초안 작성 전용 — 고객 답장은 상담 공급사 화면에서 발송합니다.</p>
+          <p className="muted small">카카오 공급사 미연동: 상담은 수동 등록·가져오기·테스트 수신으로 관리하고, 고객 답장은 공급사 화면에서 보낸 뒤 '직접 발송함'으로 기록합니다.</p>
         </div>
+        <button className="btn primary" onClick={() => setRegistering(true)}>
+          + 상담 등록
+        </button>
       </div>
+      {registering && (
+        <Modal title="상담 등록" onClose={() => setRegistering(false)}>
+          <ManualConversation
+            onDone={(id) => {
+              setRegistering(false);
+              list.reload();
+              navTo(`/inbox/${id}`);
+            }}
+          />
+        </Modal>
+      )}
       <DataBanner ds={home.data?.dataStatus} />
       <div className={`inbox ${id ? "has-conv" : ""} ${showInfo ? "show-info" : ""}`}>
         <section className="list" aria-label="상담 목록">
@@ -89,6 +105,8 @@ export function Inbox() {
                   {c.stage && <StageBadge stage={c.stage} />}
                   <CategoryBadge category={c.category} />
                   {c.locked_by && <span className="badge warn">작성 중</span>}
+                  {c.data_origin === "test" && <span className="badge">테스트</span>}
+                  {c.data_origin === "manual" && <span className="badge">수동</span>}
                   <SampleTag show={c.is_sample} />
                   <span className="tiny muted">{c.assignee_name ?? "미배정"}</span>
                 </div>
@@ -375,8 +393,20 @@ function InfoPanel({ id, onClose }: { id: string; onClose: () => void }) {
                 >
                   복사
                 </button>
-                <button className="btn sm" onClick={async () => (await post(`/api/approvals/${a.id}/decision`, { decision: "sent_externally" }), d.reload())}>
-                  공급사에서 발송함
+                <button
+                  className="btn sm primary"
+                  onClick={async () => {
+                    try {
+                      await post(`/api/conversations/${id}/outbound`, { body: a.payload.body, approval_id: a.id });
+                      await post(`/api/approvals/${a.id}/decision`, { decision: "approve" });
+                      toast.show("고객 발송 목록에 올렸습니다(승인 대기).");
+                      d.reload();
+                    } catch (e: any) {
+                      toast.show(e.message);
+                    }
+                  }}
+                >
+                  발송 목록에 올리기
                 </button>
                 <button className="btn sm ghost danger" onClick={async () => (await post(`/api/approvals/${a.id}/decision`, { decision: "discard" }), d.reload())}>
                   폐기
@@ -386,6 +416,7 @@ function InfoPanel({ id, onClose }: { id: string; onClose: () => void }) {
           ))}
       </div>
 
+      <OutboundPanel id={id} items={d.data.outbound ?? []} onChange={d.reload} />
       <TaskQuick conversationId={id} opportunityId={o?.id} me={me} />
       {toast.node}
     </div>
@@ -436,6 +467,129 @@ function TaskQuick({ conversationId, opportunityId }: { conversationId: string; 
         <button className="btn">추가</button>
       </div>
       {toast.node}
+    </form>
+  );
+}
+
+const OUT_LABEL: Record<string, string> = {
+  pending_approval: "승인 대기",
+  queued: "발송 대기",
+  sending: "전송 중",
+  sent: "전송됨(공급사 확인)",
+  failed: "실패",
+  unknown: "확인 불가 — 재발송 전 상태 확인",
+  sent_manually: "직접 발송함(기록)",
+  cancelled: "취소",
+  blocked_no_provider: "공급사 발송 미연동 — 직접 발송 필요",
+};
+
+function OutboundPanel({ id, items, onChange }: { id: string; items: any[]; onChange: () => void }) {
+  const [body, setBody] = useState("");
+  const toast = useToast();
+  const act = async (oid: string, decision: string) => {
+    try {
+      await post(`/api/outbound/${oid}/decision`, { decision });
+      onChange();
+    } catch (e: any) {
+      toast.show(e.message);
+    }
+  };
+  return (
+    <div className="card stack" style={{ padding: 12 }}>
+      <h3>고객 발송</h3>
+      <p className="tiny muted">대표 보고와 별개입니다. 수신자·본문·상태가 기록되며, 결과를 모르는 메시지는 자동으로 다시 보내지 않습니다.</p>
+      {items.map((m) => (
+        <div key={m.id} className="draft-box">
+          <div className="label">
+            {OUT_LABEL[m.status] ?? m.status} · {m.channel === "provider" ? "공급사" : "수동"} {m.sent_at && `· ${fmtDateTime(m.sent_at)}`}
+          </div>
+          <div className="small pre">{m.body}</div>
+          {m.last_error && <div className="tiny muted">{m.last_error}</div>}
+          <div className="row" style={{ marginTop: 6 }}>
+            {m.status === "pending_approval" && (
+              <button className="btn sm primary" onClick={() => act(m.id, "approve")}>
+                승인
+              </button>
+            )}
+            {["pending_approval", "blocked_no_provider", "failed", "unknown"].includes(m.status) && (
+              <button className="btn sm" onClick={async () => (await navigator.clipboard?.writeText(m.body).catch(() => {}), act(m.id, "sent_manually"))}>
+                복사 후 직접 발송함
+              </button>
+            )}
+            {m.status === "unknown" && (
+              <button className="btn sm" onClick={() => act(m.id, "check_status")}>
+                상태 확인
+              </button>
+            )}
+            {m.status === "failed" && (
+              <button className="btn sm" onClick={() => act(m.id, "retry")}>
+                다시 보내기
+              </button>
+            )}
+            {["pending_approval", "queued", "blocked_no_provider", "failed"].includes(m.status) && (
+              <button className="btn sm ghost danger" onClick={() => act(m.id, "cancel")}>
+                취소
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      <form
+        className="stack"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!body.trim()) return;
+          try {
+            await post(`/api/conversations/${id}/outbound`, { body, client_key: `${Date.now()}` });
+            setBody("");
+            onChange();
+          } catch (err: any) {
+            toast.show(err.message);
+          }
+        }}
+      >
+        <textarea placeholder="고객에게 보낼 메시지 (승인 후 발송)" value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 60 }} aria-label="고객 발송 메시지" />
+        <button className="btn sm" style={{ alignSelf: "flex-start" }}>
+          발송 목록에 추가
+        </button>
+      </form>
+      {toast.node}
+    </div>
+  );
+}
+
+function ManualConversation({ onDone }: { onDone: (id: string) => void }) {
+  const [v, setV] = useState({ customer_name: "", phone: "", channel_label: "전화", text: "", test: false });
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <form
+      className="stack"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        try {
+          const r = await post("/api/conversations/manual", { customer_name: v.customer_name, phone: v.phone || undefined, channel_label: v.channel_label, test: v.test, messages: [{ sender: "customer", text: v.text }] });
+          onDone(r.conversationId);
+        } catch (e: any) {
+          setErr(e.message);
+        }
+      }}
+    >
+      <input placeholder="고객 이름/상호" value={v.customer_name} onChange={(e) => setV({ ...v, customer_name: e.target.value })} required />
+      <input placeholder="연락처 (선택)" value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} />
+      <select value={v.channel_label} onChange={(e) => setV({ ...v, channel_label: e.target.value })} aria-label="유입 채널">
+        <option>전화</option>
+        <option>카카오(수동 입력)</option>
+        <option>인스타그램 DM</option>
+        <option>네이버</option>
+        <option>소개</option>
+        <option>기타</option>
+      </select>
+      <textarea placeholder="고객 문의 내용" value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} required />
+      <label className="check">
+        <input type="checkbox" checked={v.test} onChange={(e) => setV({ ...v, test: e.target.checked })} /> 테스트 수신 (실제 고객 데이터와 분리, 집계 제외)
+      </label>
+      {err && <div className="banner danger">{err}</div>}
+      <button className="btn primary">등록</button>
     </form>
   );
 }

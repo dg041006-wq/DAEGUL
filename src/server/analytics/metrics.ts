@@ -43,7 +43,7 @@ export async function awaitingHuman(scope: Scope, limit = 50) {
   const acc = conversationAccessSql(scope, "c", params);
   params.push(limit);
   const rows = await q(
-    `SELECT c.id, c.last_customer_message_at, c.last_staff_message_at, c.assignee_user_id, c.is_sample, c.ai_summary,
+    `SELECT c.id, c.last_customer_message_at, c.last_staff_message_at, c.assignee_user_id, c.is_sample, c.ai_summary, c.data_origin,
             ct.display_name, u.name AS assignee_name, oc.opportunity_id,
             (SELECT body FROM messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' ORDER BY sent_at DESC LIMIT 1) AS last_customer_body
      FROM conversations c
@@ -93,7 +93,7 @@ export async function homeSummary(scope: Scope, period: Period) {
   const p = params.length;
   const today = await q1<{ new_valid: number; other: number }>(
     `SELECT count(*) FILTER (WHERE category='valid') AS new_valid, count(*) FILTER (WHERE category<>'valid') AS other
-     FROM opportunities o WHERE ${acc} AND o.merged_into_id IS NULL AND o.opened_at >= $${p - 1} AND o.opened_at < $${p}`,
+     FROM opportunities o WHERE ${acc} AND o.merged_into_id IS NULL AND o.data_origin <> 'test' AND o.opened_at >= $${p - 1} AND o.opened_at < $${p}`,
     params,
   );
   const params2: unknown[] = [];

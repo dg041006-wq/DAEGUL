@@ -12,6 +12,12 @@ const paths: Record<string, string> = {
   back: "M15 5l-7 7 7 7",
   info: "M12 8h.01M11 12h1v5h1M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
   link: "M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1",
+  calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c0-3.5 3-6 7-6s7 2.5 7 6",
+  won: "M4 7l3 10 3-8 2 8 2-8 3 8 3-10M3 11h18M3 14h18",
+  spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
+  search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5",
+  clip: "M8 12l6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l7-7",
 };
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {

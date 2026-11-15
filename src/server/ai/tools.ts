@@ -2,19 +2,25 @@
 // AI는 요청한 사람의 권한을 넘는 자료를 검색/요약할 수 없다.
 import type Anthropic from "@anthropic-ai/sdk";
 import { q, q1 } from "../db/pool.js";
-import { can, conversationAccessSql, opportunityAccessSql, type Scope } from "../auth/scope.js";
+import { can, contactAccessSql, conversationAccessSql, opportunityAccessSql, type Scope } from "../auth/scope.js";
 import { analyticsOverview, awaitingHuman, financeOverview, quoteAwaitingReply } from "../analytics/metrics.js";
 import { resolvePeriod } from "../lib/time.js";
 import { maskPII } from "./mask.js";
+import { receivables, schedule } from "../analytics/operations.js";
+import { createTask, updateTask } from "../lib/tasks.js";
+import { addDays, kstDateString } from "../lib/time.js";
 
 export interface ToolContext {
   scope: Scope;
   /** 도구 호출로 실제 조회된 대상 — 보고서 메타데이터(대상 건수, 근거 검증)에 사용 */
   seen: { conversationIds: Set<string>; opportunityIds: Set<string>; messageIds: Set<string>; periods: Array<{ from: string; to: string }> };
+  /** 실제로 실행한 변경 작업 — 답변 문장과 별개로 서버가 기록 */
+  executed: Array<{ tool: string; ok: boolean; summary: string; ref?: { type: string; id: string } }>;
+  draftReply?: (conversationId: string) => Promise<{ ok: boolean; body?: string; message?: string; approvalId?: string }>;
 }
 
 export function newToolContext(scope: Scope): ToolContext {
-  return { scope, seen: { conversationIds: new Set(), opportunityIds: new Set(), messageIds: new Set(), periods: [] } };
+  return { scope, seen: { conversationIds: new Set(), opportunityIds: new Set(), messageIds: new Set(), periods: [] }, executed: [] };
 }
 
 const periodProps = {
@@ -78,6 +84,57 @@ export function toolDefinitions(scope: Scope): Anthropic.Tool[] {
       input_schema: { type: "object", properties: periodProps, additionalProperties: false },
     });
   }
+  tools.push(
+    {
+      name: "list_schedule",
+      description: "작업 일정(촬영·스타일링·시공 등)과 팀 일정. 기본: 오늘부터 7일.",
+      input_schema: { type: "object", properties: periodProps, additionalProperties: false },
+    },
+    {
+      name: "find_customer",
+      description: "고객 이름·연락처 일부로 고객과 최근 작업/상담 찾기",
+      input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false },
+    },
+    {
+      name: "create_task",
+      description: "할 일을 실제로 등록한다. due_at은 ISO 8601(KST 오프셋 포함). 대상(conversation_id/project_id/contact_id)을 알면 연결한다.",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          due_at: { type: ["string", "null"] },
+          remind_at: { type: ["string", "null"] },
+          conversation_id: { type: ["string", "null"] },
+          project_id: { type: ["string", "null"] },
+          contact_id: { type: ["string", "null"] },
+          assignee_user_id: { type: ["string", "null"] },
+        },
+        required: ["title"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "update_task",
+      description: "할 일 상태(done/cancelled/open), 기한, 다시 알림 시각을 실제로 변경",
+      input_schema: {
+        type: "object",
+        properties: { task_id: { type: "string" }, status: { type: ["string", "null"] }, due_at: { type: ["string", "null"] }, remind_at: { type: ["string", "null"] } },
+        required: ["task_id"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "draft_customer_reply",
+      description: "상담에 대한 고객 답장 초안을 승인 대기 상태로 만든다(발송하지 않음). 승인된 가격표·정책만 근거.",
+      input_schema: { type: "object", properties: { conversation_id: { type: "string" } }, required: ["conversation_id"], additionalProperties: false },
+    },
+  );
+  if (can(scope, "view_finance"))
+    tools.push({
+      name: "list_receivables",
+      description: "미수금 확인 대상(확정 금액 대비 확인된 입금 부족)과 금액 미확정 작업. 고객 주장 입금은 미확인으로 구분됨.",
+      input_schema: { type: "object", properties: {}, additionalProperties: false },
+    });
   tools.push({
     name: "submit_answer",
     description:
@@ -235,6 +292,77 @@ export async function executeTool(ctx: ToolContext, name: string, input: any): P
       if (!can(s, "view_finance")) return { error: "권한 없음" };
       const p = trackPeriod(ctx, input);
       return financeOverview(s, p);
+    }
+    case "list_schedule": {
+      const from = /^\d{4}-\d{2}-\d{2}$/.test(input?.from ?? "") ? input.from : kstDateString(new Date());
+      const to = /^\d{4}-\d{2}-\d{2}$/.test(input?.to ?? "") ? input.to : addDays(from, 7);
+      ctx.seen.periods.push({ from, to });
+      const r = await schedule(s, from, to);
+      // 데이터 최소화: 주소·연락처는 모델에 보내지 않고 '있음/없음'만 전달
+      return {
+        projects: r.projects.map((p: any) => ({ project_id: p.id, title: p.title, date: p.scheduled_date, time: p.start_time ?? p.time_raw, status: p.status, has_address: !!p.address, has_phone: p.has_phone, work_type: p.work_type })),
+        team_blocks: r.blocks.map((b: any) => ({ date: b.date, label: b.kind === "personal" ? "개인 일정" : b.label })),
+      };
+    }
+    case "find_customer": {
+      const term = String(input?.query ?? "").trim().slice(0, 40);
+      if (term.length < 2) return { error: "검색어는 2자 이상" };
+      const params: unknown[] = [];
+      const acc = contactAccessSql(s, "ct", params);
+      params.push(`%${term}%`);
+      const rows = await q(
+        `SELECT ct.id, ct.display_name,
+           (SELECT json_agg(json_build_object('project_id', p.id, 'title', p.title, 'date', p.scheduled_date, 'status', p.status)) FROM (SELECT * FROM projects WHERE contact_id=ct.id ORDER BY scheduled_date DESC NULLS LAST LIMIT 5) p) AS projects,
+           (SELECT json_agg(c.id) FROM conversations c WHERE c.contact_id=ct.id) AS conversation_ids
+         FROM contacts ct WHERE ${acc} AND (ct.display_name ILIKE $${params.length} OR ct.phone ILIKE $${params.length}) LIMIT 10`,
+        params,
+      );
+      rows.forEach((r: any) => (r.conversation_ids ?? []).forEach((id: string) => ctx.seen.conversationIds.add(id)));
+      return rows;
+    }
+    case "list_receivables": {
+      const r = await receivables(s);
+      if (r.restricted) return { error: "권한 없음" };
+      return {
+        note: "outstanding = 확정 금액 - 확인된 입금. claimed는 고객 주장/시트 기재 입금(미확인) 건수.",
+        due: r.due.map((x: any) => ({ project_id: x.id, title: x.title, date: x.scheduled_date, amount: x.amount, paid: x.paid, outstanding: x.outstanding, claimed: x.claimed })),
+        amount_unconfirmed: r.unconfirmedAmount.map((x: any) => ({ project_id: x.id, title: x.title, date: x.scheduled_date, sheet_listed_price: x.listed_price })),
+      };
+    }
+    case "create_task": {
+      try {
+        const t = await createTask(s, { title: String(input.title ?? ""), due_at: input.due_at ?? null, remind_at: input.remind_at ?? null, conversation_id: input.conversation_id ?? null, project_id: input.project_id ?? null, contact_id: input.contact_id ?? null, assignee_user_id: input.assignee_user_id ?? null, source: "ai", source_reason: "AI 직원 대화 요청" }, "ai");
+        ctx.executed.push({ tool: name, ok: true, summary: `할 일 등록: ${t.title}${t.due_at ? ` (기한 ${new Date(t.due_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })})` : ""}`, ref: { type: "task", id: t.id } });
+        return { ok: true, task_id: t.id };
+      } catch (e: any) {
+        ctx.executed.push({ tool: name, ok: false, summary: `할 일 등록 실패: ${e.message}` });
+        return { error: e.message };
+      }
+    }
+    case "update_task": {
+      try {
+        const st = ["open", "done", "cancelled"].includes(input.status) ? input.status : undefined;
+        const t = await updateTask(s, String(input.task_id), { status: st, due_at: input.due_at ?? undefined, remind_at: input.remind_at ?? undefined }, "ai");
+        ctx.executed.push({ tool: name, ok: true, summary: `할 일 변경: ${t.title} → ${t.status}`, ref: { type: "task", id: t.id } });
+        return { ok: true };
+      } catch (e: any) {
+        ctx.executed.push({ tool: name, ok: false, summary: `할 일 변경 실패: ${e.message}` });
+        return { error: e.message };
+      }
+    }
+    case "draft_customer_reply": {
+      const params: unknown[] = [];
+      const acc = conversationAccessSql(s, "c", params);
+      params.push(String(input?.conversation_id ?? ""));
+      const conv = await q1(`SELECT c.id FROM conversations c WHERE ${acc} AND c.id::text=$${params.length}`, params);
+      if (!conv || !ctx.draftReply) {
+        ctx.executed.push({ tool: name, ok: false, summary: "답장 초안 실패: 상담 접근 권한 없음" });
+        return { error: "접근 권한이 없거나 존재하지 않는 상담" };
+      }
+      const r = await ctx.draftReply(conv.id);
+      ctx.executed.push({ tool: name, ok: r.ok, summary: r.ok ? "답장 초안 생성(승인 대기, 미발송)" : `답장 초안 실패: ${r.message}`, ref: { type: "conversation", id: conv.id } });
+      ctx.seen.conversationIds.add(conv.id);
+      return r.ok ? { ok: true, draft: r.body, note: "고객에게 발송되지 않았음. 담당자 승인 필요." } : { error: r.message };
     }
     default:
       return { error: `알 수 없는 도구 ${name}` };

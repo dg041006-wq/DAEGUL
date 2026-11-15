@@ -3,7 +3,8 @@
 // AI 장애나 한도 도달은 수신을 막지 않는다.
 import type pg from "pg";
 import { pool, q, q1, tx } from "../db/pool.js";
-import { getAdapter, SAMPLE_PROVIDERS } from "../integrations/registry.js";
+import { getAdapter, originOf, SAMPLE_PROVIDERS } from "../integrations/registry.js";
+import { recordEvent } from "../lib/events.js";
 import type { NormalizedEvent, NormalizedMessageEvent, VerifyInput } from "../integrations/types.js";
 import { enqueue } from "../jobs/queue.js";
 
@@ -82,23 +83,23 @@ export async function applyEvent(orgId: string, provider: string, ev: Normalized
   const isSample = SAMPLE_PROVIDERS.has(provider);
   const result = await tx(async (c) => {
     const contact = await q1<{ id: string }>(
-      `INSERT INTO contacts(org_id, provider, external_user_id, display_name, is_sample, import_id)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO contacts(org_id, provider, external_user_id, display_name, is_sample, import_id, data_origin)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (org_id, provider, external_user_id)
        DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, contacts.display_name)
        RETURNING id`,
-      [orgId, provider, ev.contact.externalUserId, ev.contact.displayName ?? null, isSample, opts.importId ?? null],
+      [orgId, provider, ev.contact.externalUserId, ev.contact.displayName ?? null, isSample, opts.importId ?? null, originOf(provider)],
       c,
     );
     const at = ev.kind === "message" ? ev.message.sentAt : ev.conversation.at;
     const conv = await q1<{ id: string }>(
-      `INSERT INTO conversations(org_id, provider, external_conversation_id, contact_id, channel, opened_at, is_sample, import_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO conversations(org_id, provider, external_conversation_id, contact_id, channel, opened_at, is_sample, import_id, data_origin)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (org_id, provider, external_conversation_id)
        DO UPDATE SET opened_at = LEAST(conversations.opened_at, EXCLUDED.opened_at),
                      channel = COALESCE(conversations.channel, EXCLUDED.channel)
        RETURNING id`,
-      [orgId, provider, ev.conversation.externalConversationId, contact!.id, ev.conversation.channel ?? null, at, isSample, opts.importId ?? null],
+      [orgId, provider, ev.conversation.externalConversationId, contact!.id, ev.conversation.channel ?? null, at, isSample, opts.importId ?? null, originOf(provider)],
       c,
     );
     const conversationId = conv!.id;
@@ -122,6 +123,13 @@ export async function applyEvent(orgId: string, provider: string, ev: Normalized
     return applyMessage(c, orgId, provider, isSample, contact!.id, conversationId, ev);
   });
 
+  if (ev.kind === "message" && !result.duplicate && !isSample) {
+    await messageEvents(orgId, provider, ev, result);
+    if (ev.message.senderType === "customer") {
+      const { maybeAutoReply } = await import("../lib/outbound.js");
+      await maybeAutoReply(orgId, result.conversationId, new Date(ev.message.sentAt)).catch(() => null);
+    }
+  }
   if (ev.kind === "message" && !result.duplicate && (ev.message.senderType === "customer" || ev.message.senderType === "staff")) {
     // 증분 분석 — 짧은 디바운스 후 1회 실행
     await enqueue(
@@ -132,6 +140,72 @@ export async function applyEvent(orgId: string, provider: string, ev: Normalized
     await q(`UPDATE conversations SET ai_status='queued' WHERE id=$1 AND ai_status NOT IN ('running')`, [result.conversationId]);
   }
   return result;
+}
+
+const COMPLAINT = /(환불|불만|실망|화가\s*나|최악|짜증|항의|어이없|성의\s*없)/;
+const PAY_CLAIM = /(입금\s*했|입금\s*완료|송금\s*했|이체\s*했|보냈습니다.*(입금|계좌))/;
+const CANCEL = /(취소\s*(할게|하고|해주|부탁|하겠)|진행\s*안\s*할|안\s*하기로)/;
+
+/** 수신 메시지에서 즉시 보고 사건 탐지 (규칙 기반 키워드 — 확정 판단이 아니라 확인 요청) */
+async function messageEvents(orgId: string, provider: string, ev: NormalizedMessageEvent, r: ApplyResult) {
+  const isTest = originOf(provider) === "test";
+  const link = `/inbox/${r.conversationId}`;
+  const who = ev.contact.displayName ?? "이름 미제공 고객";
+  if (r.opportunityCreated && ev.message.senderType === "customer") {
+    await recordEvent(orgId, {
+      kind: "new_inquiry",
+      title: `신규 문의: ${who}`,
+      dedupeKey: `new_inquiry:${r.opportunityId}`,
+      entityType: "opportunity",
+      entityId: r.opportunityId,
+      link,
+      isTest,
+      feedText: `대표님, 신규 문의가 들어왔습니다. ${who}님 (${ev.conversation.channel ?? provider})`,
+      actions: [
+        { label: "상담 열기", type: "open", link },
+        { label: "답장 초안 보기", type: "draft_reply", conversation_id: r.conversationId },
+        { label: "내가 담당", type: "assign_self", conversation_id: r.conversationId },
+        { label: "할 일로 등록", type: "create_task", title: `신규 문의 응대: ${who}`, conversation_id: r.conversationId, opportunity_id: r.opportunityId, due: "today" },
+      ],
+    });
+  }
+  if (ev.message.senderType !== "customer" || !ev.message.body) return;
+  const body = ev.message.body;
+  if (COMPLAINT.test(body))
+    await recordEvent(orgId, {
+      kind: "complaint",
+      title: `불만 신호 감지: ${who} (키워드 규칙)`,
+      dedupeKey: `complaint:${r.messageId}`,
+      entityType: "conversation",
+      entityId: r.conversationId,
+      link: `${link}?m=${r.messageId}`,
+      isTest,
+      feedText: `대표님, ${who}님 상담에서 불만으로 보이는 표현이 있습니다(키워드 규칙 탐지 — 원문 확인 필요).`,
+      actions: [{ label: "해당 메시지 보기", type: "open", link: `${link}?m=${r.messageId}` }, { label: "내가 담당", type: "assign_self", conversation_id: r.conversationId }],
+    });
+  if (CANCEL.test(body))
+    await recordEvent(orgId, {
+      kind: "cancelled",
+      title: `취소 의사로 보이는 메시지: ${who} (확인 필요)`,
+      dedupeKey: `cancel:${r.messageId}`,
+      entityType: "conversation",
+      entityId: r.conversationId,
+      link: `${link}?m=${r.messageId}`,
+      isTest,
+      feedText: `대표님, ${who}님이 취소 의사로 보이는 메시지를 보냈습니다. 확정 전 확인이 필요합니다.`,
+    });
+  if (PAY_CLAIM.test(body))
+    await recordEvent(orgId, {
+      kind: "payment_claimed",
+      title: `고객이 입금했다고 알림: ${who} — 실제 입금 확인 전`,
+      dedupeKey: `payclaim:${r.messageId}`,
+      entityType: "conversation",
+      entityId: r.conversationId,
+      link: `${link}?m=${r.messageId}`,
+      isTest,
+      feedText: `대표님, ${who}님이 입금했다고 알렸습니다. 아직 '확인된 입금'이 아니므로 통장 확인 후 정산에 기록해 주세요.`,
+      actions: [{ label: "상담 보기", type: "open", link: `${link}?m=${r.messageId}` }, { label: "입금 확인 할 일", type: "create_task", title: `입금 확인: ${who}`, conversation_id: r.conversationId, due: "today" }],
+    });
 }
 
 async function applyMessage(
@@ -196,9 +270,9 @@ async function applyMessage(
         c,
       );
       const opp = await q1<{ id: string }>(
-        `INSERT INTO opportunities(org_id, contact_id, opened_at, last_contact_at, is_sample, duplicate_of_candidate, services)
-         VALUES ($1,$2,$3,$3,$4,$5,'{}') RETURNING id`,
-        [orgId, contactId, m.sentAt, isSample, prior?.id ?? null],
+        `INSERT INTO opportunities(org_id, contact_id, opened_at, last_contact_at, is_sample, duplicate_of_candidate, services, data_origin)
+         VALUES ($1,$2,$3,$3,$4,$5,'{}',$6) RETURNING id`,
+        [orgId, contactId, m.sentAt, isSample, prior?.id ?? null, originOf(provider)],
         c,
       );
       opportunityId = opp!.id;
