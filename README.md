@@ -1,49 +1,43 @@
 # STAYSCENE OFFICE
 
-스테이신 대표와 초대받은 직원이 PC·휴대폰에서 함께 쓰는 내부 업무 앱입니다.
-카카오 상담 대화를 공식 경로로 연동해 문의 수·유형·전환·이탈 사유를 분석하고, 정장 차림 AI 직원 3명(마케팅 팀장 · CS 팀장 · 경영전략실장)에게 업무를 요청하는 구조입니다.
+스테이신 대표와 직원이 PC·휴대폰에서 함께 쓰는 내부 업무 앱(설치형 PWA)입니다.
+문의 → 대응 → 계약 → 작업 일정 → 납품 → 정산까지 한 흐름으로 관리하고, AI 직원 3명(운영비서 · 영업·상담 담당 · 경영·전략 담당)이 필요한 순간 대표님께 먼저 보고합니다.
 
-> **현재 상태: 개발 1단계 + 2단계 일부 / 카카오 미연동 / 운영 준비 미완료.**
-> 카카오(상담톡) 공식 연동은 아직 검증되지 않았습니다. 화면의 상담·수치는 샘플 데이터이며 앱에 '샘플 데이터 / 카카오 미연동'으로 표시됩니다.
-> 실제 연동된 부분과 데모 부분의 구분, 검증 결과, 미완료 항목은 [`docs/STATUS.md`](docs/STATUS.md)를 보세요.
+> **현재 상태:** 운영 배포 미완료(호스팅 계정 필요) · 카카오 상담톡 미연동 · 실제 AI 호출 미검증(API 키 필요).
+> 정확한 구분과 검증 결과는 [`docs/STATUS.md`](docs/STATUS.md), 배포 절차는 [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+## 주요 기능
+
+- **대표실**: 오늘 우선순위, 답변 대기, 결정이 필요한 일, 마감 임박, 최근 보고, AI 직원 상태(처리 중·새 보고·실패)
+- **AI 직원 보고방**: 신규 문의·계약 확정·입금 확인·일정 변경·취소·불만 신호·납기 위험·준비 누락 등을 담당 AI가 즉시 보고. 버튼으로 할 일 등록·다시 알림·답장 초안·담당 지정·처리 완료
+- **정기 보고 (서버 실행, KST)**: 매일 19:00 일일 보고, 금요일 19:10 주간 보고. 놓친 회차 보충, 회차당 1건, 테스트 실행 분리
+- **일정·작업**: 촬영·브랜딩·스타일링·시공 일정, 작업 전/후 체크리스트, 납품·수정, 첨부
+- **정산**: 확인 입금 vs 확인 필요 입금(고객 주장·시트 기재), 시트 단가 vs 확정 금액, 미수금, 비용·공헌이익
+- **고객 이력**, **통합 검색**, **경영 제안**(채택→할 일), **고객 발송 큐**(대표 보고와 분리)
+- **업무 시트 가져오기**(.xlsx, 미리보기·확인 필요 표시·중복 방지) + 구글시트 읽기 전용 연동 구조 — [`docs/SHEET_MAPPING.md`](docs/SHEET_MAPPING.md)
+- **웹 푸시**, PC↔휴대폰 실시간 동기화, 저장 상태·충돌 방지, 로그아웃 시 캐시·구독 삭제
 
 ## 구성
 
-| 영역 | 기술 |
-|---|---|
-| 프런트엔드 | React 18 + TypeScript + Vite, 반응형(390px~1440px), PWA(설치·앱 셸 캐시) |
-| 서버 API | Node.js 20+ / Fastify 5 / TypeScript |
-| DB | PostgreSQL 14+ (SQL 마이그레이션) |
-| 작업 큐 | PostgreSQL 기반(`jobs` 테이블, `SKIP LOCKED`) — 별도 워커 프로세스 |
-| AI | 서버에서 Claude API(`@anthropic-ai/sdk`), 기본 모델 `claude-opus-5-5` |
-| 인증 | 초대 기반 계정(공개 가입 없음), scrypt 비밀번호, httpOnly 세션 쿠키 |
+TypeScript · Fastify 5 · PostgreSQL 14+ · React 18(Vite) · PostgreSQL 기반 작업 큐 · Claude API(`claude-opus-5-5`) · Web Push(VAPID)
 
 ```
-src/
-  shared/domain.ts           분류 체계(서비스 유형·단계·이탈 사유 등) 공용 상수
-  server/
-    db/migrations/*.sql      DB 스키마
-    integrations/            상담 공급사 어댑터 (demo 구현, channeltalk 자리표시)
-    ingest/ingest.ts         원본 이벤트 수신함 → 정규화 → 대화 저장소, 기회 연결
-    analytics/metrics.ts     지표 계산(DB 쿼리)
-    ai/                      AI 직원(권한 제한 도구), 상담 분석, 답장 초안, 마스킹
-    jobs/                    작업 큐, 자동화(답변 지연·견적 후속·정기 보고·보관 정리)
-    routes/                  API (모든 읽기/쓰기에서 서버 권한 검사)
-    seed/demo.ts             샘플 데이터
-  web/                       화면 (대표실, 상담함, 고객/영업, 분석실, AI 직원, 보고서, 할 일, 알림함, 설정)
-test/                        필수 검증 시나리오 자동 테스트
-docs/                        연동 검증 계획, 가져오기 형식, 운영, 현황 보고
+src/server/  db/migrations · ingest(수신) · integrations(공급사 어댑터) · lib(events, push, outbound, tasks, sheetImport, sheetsSync, realtime)
+             analytics · ai(직원·분석·도구) · jobs(reports, ideas, automation, queue) · routes
+src/web/     pages(대표실, 상담함, 일정·작업, 고객, 정산, AI 직원, 보고서, 경영 제안, 설정 …) · lib(api, realtime, pwa)
+test/        자동 테스트 (51개)
+docs/        STATUS · DEPLOY · SHEET_MAPPING · INTEGRATION · OPERATIONS · IMPORT_FORMAT
 ```
 
 ## 로컬 실행
 
-필요: Node.js 20 이상, PostgreSQL 14 이상.
+Node.js 20+, PostgreSQL 14+ 필요.
 
 ```bash
 cp .env.example .env
 ```
 
-`.env`에서 `DATABASE_URL`, `SESSION_SECRET`(32자 이상 임의 문자열), `DEMO_WEBHOOK_SECRET`을 채웁니다. 비밀값은 `.env`나 배포 플랫폼 비밀 설정에만 넣고, 채팅·이슈·커밋에 붙여넣지 마세요.
+`.env`에 `DATABASE_URL`, `SESSION_SECRET`(32자 이상)을 채웁니다. 비밀값은 채팅·커밋에 넣지 마세요.
 
 ```bash
 npm install
@@ -53,29 +47,21 @@ npm install
 npm run db:migrate
 ```
 
-샘플 데이터와 로컬 확인용 데모 계정(대표/직원) 생성 — 비밀번호는 실행 결과에 출력됩니다(또는 `DEMO_OWNER_PASSWORD`, `DEMO_STAFF_PASSWORD`로 지정):
-
-```bash
-npm run db:seed-demo
-```
-
-API·워커·프런트엔드 개발 서버 동시 실행 (http://localhost:5173):
-
-```bash
-npm run dev
-```
-
-### 실제 대표 계정 만들기 (데모 계정 대신)
+대표 계정 만들기 (또는 `SETUP_TOKEN`을 설정하고 첫 화면에서 생성):
 
 ```bash
 OWNER_EMAIL=you@example.com OWNER_NAME=대표 OWNER_PASSWORD='10자 이상 비밀번호' npm run admin:create-owner
 ```
 
-이후 직원은 설정 → 구성원·권한에서 초대 링크로 추가합니다.
+```bash
+npm run dev
+```
+
+로컬 확인용 샘플 데이터(`npm run db:seed-demo`)는 데모 계정을 만들므로 **운영 환경에서 실행하지 마세요.**
 
 ## 테스트
 
-테스트 전용 DB(`stayscene_test`, 또는 `TEST_DATABASE_URL`)가 필요합니다. 테스트는 해당 DB의 `public` 스키마를 초기화합니다.
+테스트 DB(`stayscene_test` 또는 `TEST_DATABASE_URL`)의 `public` 스키마를 초기화합니다.
 
 ```bash
 npm test
@@ -85,29 +71,14 @@ npm test
 npm run typecheck
 ```
 
-## 빌드·배포
+## 배포
 
 ```bash
 npm run build
 ```
 
-운영에서는 두 프로세스를 띄웁니다. 둘 다 시작 시 마이그레이션을 적용합니다.
-
 ```bash
 npm start
 ```
 
-```bash
-npm run start:worker
-```
-
-- `npm start`는 API와 빌드된 화면(`dist-web`)을 같은 포트(`PORT`, 기본 3000)에서 제공합니다. 새로 빌드한 뒤에는 API 프로세스를 재시작하세요.
-- HTTPS 종단(리버스 프록시/플랫폼) 뒤에 두고 `NODE_ENV=production`을 설정하면 세션 쿠키에 `Secure`가 붙습니다.
-- 필수 환경변수: `DATABASE_URL`, `SESSION_SECRET`, `APP_BASE_URL`. AI 사용 시 `ANTHROPIC_API_KEY`(서버 전용).
-- 백업·복원, 계정 회수, 보관 정책: [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
-
-## AI 설정
-
-- `ANTHROPIC_API_KEY`가 없으면 AI 기능은 '모델 API 미연동'으로 표시되고, AI 직원은 DB 집계 기반 **규칙 응답**(명확히 표시)만 합니다. 상담 수신·기본 업무는 영향 없음.
-- 기본 모델 `claude-opus-5-5`, 적응형 사고, 거절 시 서버측 폴백(`AI_SERVER_FALLBACK=false`로 끔).
-- Claude API 사용료는 Claude 구독과 별도로 청구됩니다. 월 한도(설정 → AI 비용)에 도달하면 분석만 대기합니다.
+`RUN_WORKER_IN_PROCESS=true`면 한 프로세스가 API·화면·워커·정기 보고를 모두 실행합니다. Docker/Render 설정과 절차는 [`docs/DEPLOY.md`](docs/DEPLOY.md), 백업·복원·보관 정책은 [`docs/OPERATIONS.md`](docs/OPERATIONS.md).

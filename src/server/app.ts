@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { config } from "./config.js";
+import { pool } from "./db/pool.js";
+import { setupRoutes } from "./routes/setup.js";
 import { resolveSession, SESSION_COOKIE } from "./auth/session.js";
 import { authRoutes } from "./routes/auth.js";
 import { coreRoutes } from "./routes/core.js";
@@ -40,6 +42,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.addHook("onRequest", async (req, reply) => {
     if (!req.url.startsWith("/api/")) return;
     if (req.url.startsWith("/api/webhooks/")) return;
+    if (req.url.startsWith("/api/setup/")) return; // 최초 설정은 일회용 토큰으로 보호
     // CSRF 완화: 상태 변경 요청은 커스텀 헤더 필수 (SameSite=Lax 쿠키와 함께)
     if (req.method !== "GET" && req.method !== "HEAD" && req.headers["x-requested-with"] !== "stayscene") {
       return reply.code(400).send({ error: "잘못된 요청 헤더" });
@@ -70,8 +73,19 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(adminRoutes);
   await app.register(webhookRoutes);
   await app.register(opsRoutes);
+  await app.register(setupRoutes);
 
-  app.get("/api/health", async () => ({ ok: true }));
+  // 상태 확인: DB 연결과 워커 동작 여부 (내부 정보·비밀값 미포함)
+  app.get("/api/health", async (_req, reply) => {
+    try {
+      await pool.query("SELECT 1");
+    } catch {
+      return reply.code(503).send({ ok: false, db: false });
+    }
+    const w = await pool.query(`SELECT max(finished_at) AS last FROM jobs WHERE kind='sweep_org' AND status='done'`);
+    const last = w.rows[0]?.last ? new Date(w.rows[0].last) : null;
+    return { ok: true, db: true, workerLastSweepAt: last, workerHealthy: !!last && Date.now() - last.getTime() < 5 * 60_000 };
+  });
 
   // 프로덕션: 빌드된 프런트엔드 제공 (SPA)
   const here = path.dirname(fileURLToPath(import.meta.url));

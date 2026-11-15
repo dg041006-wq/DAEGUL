@@ -1,0 +1,38 @@
+# Render Blueprint — Render 대시보드 → New → Blueprint → 이 저장소 선택으로 생성
+# 웹 서비스 1개(API + 화면 + 워커/정기 보고 같은 프로세스) + PostgreSQL 1개.
+# 정기 보고·푸시가 끊기지 않으려면 잠들지 않는 유료 인스턴스(starter 이상)가 필요합니다. free 플랜은 유휴 시 잠들어 보고가 늦어집니다.
+services:
+  - type: web
+    name: stayscene-office
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RUN_WORKER_IN_PROCESS
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stayscene-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SETUP_TOKEN
+        generateValue: true
+      - key: APP_BASE_URL
+        sync: false # 예: https://stayscene-office.onrender.com
+      - key: ANTHROPIC_API_KEY
+        sync: false # Claude Console에서 발급한 키 (비워두면 규칙 모드)
+      - key: AI_MODEL
+        value: claude-opus-5-5
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false # 구글시트 읽기 전용 연동 시에만
+databases:
+  - name: stayscene-db
+    plan: basic-256mb
+    region: singapore
+    databaseName: stayscene
+    postgresMajorVersion: "16"

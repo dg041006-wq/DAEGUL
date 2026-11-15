@@ -511,3 +511,20 @@ describe("데이터 삭제 — 파생 데이터까지", () => {
     void minutesAgo;
   });
 });
+
+describe("재시작 후 복구", () => {
+  it("워커가 중단되어 'running'으로 남은 작업과 실패한 수신 이벤트를 재처리한다", async () => {
+    const { recoverStuckJobs } = await import("../src/server/jobs/queue.js");
+    const { requeueFailedEvents } = await import("../src/server/ingest/ingest.js");
+    await q(`INSERT INTO jobs(kind, payload, status, locked_at) VALUES ('sweep_org', $1, 'running', now() - interval '11 minutes')`, [{ orgId: ctx.orgId }]);
+    await recoverStuckJobs();
+    expect((await q1<{ n: number }>(`SELECT count(*) AS n FROM jobs WHERE status='running'`))!.n).toBe(0);
+    const r = await testInbound({ user: "rs1", conv: "crs1", text: "재처리 검증" });
+    expect(r.status).toBe(200);
+    await q(`UPDATE webhook_events SET status='failed' WHERE external_event_id IN (SELECT external_event_id FROM webhook_events ORDER BY received_at DESC LIMIT 1)`);
+    await q(`UPDATE jobs SET status='done' WHERE kind='process_webhook_event'`);
+    expect(await requeueFailedEvents(ctx.orgId)).toBe(1);
+    await drainJobs();
+    expect((await q1<{ n: number }>(`SELECT count(*) AS n FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.external_conversation_id='crs1'`))!.n).toBe(1);
+  });
+});
