@@ -1,0 +1,702 @@
+{
+ "exportedAt": "2026-11-23T06:32:49.785Z",
+ "note": "배치 시뮬레이션. 이미지는 전달용 JPEG를 긴 변 1600px로 줄인 사본. 원본 크기 마스터와 재현 입력은 manifest의 inputHash로 식별.",
+ "jobs": [
+  {
+   "file": "A_view1.jpg",
+   "variant": "A안 v1",
+   "view": "시점 1",
+   "inputHash": "2af565f84a32284f4fdded72df2155f8a1d109c98457bbb25f4491301f1b2fd9",
+   "rendererVersion": "three-r170/compose-v1",
+   "calibration": {
+    "status": "estimated",
+    "camera": {
+     "C": [
+      0.173419945,
+      1.396712437,
+      1.39560101
+     ],
+     "R": [
+      0.916729440113,
+      0.109956480682,
+      -0.384079036118,
+      -0.000020616801,
+      0.961391626671,
+      0.275183828999,
+      0.399508614681,
+      -0.252261199006,
+      0.881338274598
+     ],
+     "f": 1000,
+     "cx": 1200,
+     "cy": 800,
+     "width": 2400,
+     "height": 1600
+    }
+   },
+   "masksRev": 0,
+   "viewAdjust": {
+    "wb": [
+     1,
+     1,
+     1
+    ],
+    "grain": null,
+    "blurPx": 0.6,
+    "exposure": 0
+   },
+   "state": {
+    "lighting": {
+     "ambient": 1,
+     "softness": 0.7,
+     "colorTempK": 5600,
+     "sunIntensity": 1.8,
+     "contactShadow": 0.7,
+     "sunAzimuthDeg": 90,
+     "shadowStrength": 0.45,
+     "sunElevationDeg": 40
+    },
+    "placements": [
+     {
+      "id": "pl-k5y3aa",
+      "dims": {
+       "d": 82,
+       "h": 71,
+       "w": 181
+      },
+      "assetId": "bc63079b-3ffb-4706-b3f8-5ad1847466f0",
+      "position": {
+       "x": 0.4049,
+       "z": 0.35
+      },
+      "nonStandard": false,
+      "rotationDeg": 15,
+      "assetVersionId": "677b934b-3847-46f2-84f0-c0f53e9d0e69",
+      "sizeOptionIndex": 0
+     }
+    ]
+   },
+   "assets": [
+    {
+     "name": "터프티드 가죽 3인 소파",
+     "versionId": "677b934b-3847-46f2-84f0-c0f53e9d0e69",
+     "version": 1,
+     "verification": "verified",
+     "fileSha256": "2ad41cd9f363e7294af8e604a8c0a519b200945b630b95220703cf2b3bb43b92"
+    }
+   ],
+   "evidence": [
+    {
+     "evidence": "verified_model",
+     "assetName": "터프티드 가죽 3인 소파",
+     "placementId": "pl-k5y3aa"
+    }
+   ],
+   "qa": {
+    "bbox": [
+     0,
+     927,
+     1662,
+     1599
+    ],
+    "tiles": 4,
+    "width": 2400,
+    "height": 1600,
+    "renderMs": 24562,
+    "grainSigma": 0.33,
+    "preservation": {
+     "ok": true,
+     "sizeMatch": true,
+     "diffOutside": 0
+    },
+    "allowedPixels": 798369,
+    "changedPixels": 798296,
+    "changedInProtected": 0,
+    "changedOutsideAllowed": 0,
+    "occludedFurniturePixels": 0
+   },
+   "release": "internal_test",
+   "renderMs": 25775
+  },
+  {
+   "file": "A_view2.jpg",
+   "variant": "A안 v1",
+   "view": "시점 2",
+   "inputHash": "d88f6f794d80f584e1c1ec40ea36c39249e26f61256ebd12ac26e30d8441dc92",
+   "rendererVersion": "three-r170/compose-v1",
+   "calibration": {
+    "status": "estimated",
+    "camera": {
+     "C": [
+      0.169927836,
+      1.399201118,
+      1.40601471
+     ],
+     "R": [
+      0.250188196672,
+      0.233982010129,
+      -0.939498954327,
+      -0.000674753354,
+      0.97040096713,
+      0.241498463144,
+      0.968196989746,
+      -0.059786134923,
+      0.242940748161
+     ],
+     "f": 1200,
+     "cx": 1200,
+     "cy": 800,
+     "width": 2400,
+     "height": 1600
+    }
+   },
+   "masksRev": 0,
+   "viewAdjust": {
+    "wb": [
+     1,
+     1,
+     1
+    ],
+    "grain": null,
+    "blurPx": 0.6,
+    "exposure": 0
+   },
+   "state": {
+    "lighting": {
+     "ambient": 1,
+     "softness": 0.7,
+     "colorTempK": 5600,
+     "sunIntensity": 1.8,
+     "contactShadow": 0.7,
+     "sunAzimuthDeg": 90,
+     "shadowStrength": 0.45,
+     "sunElevationDeg": 40
+    },
+    "placements": [
+     {
+      "id": "pl-k5y3aa",
+      "dims": {
+       "d": 82,
+       "h": 71,
+       "w": 181
+      },
+      "assetId": "bc63079b-3ffb-4706-b3f8-5ad1847466f0",
+      "position": {
+       "x": 0.4049,
+       "z": 0.35
+      },
+      "nonStandard": false,
+      "rotationDeg": 15,
+      "assetVersionId": "677b934b-3847-46f2-84f0-c0f53e9d0e69",
+      "sizeOptionIndex": 0
+     }
+    ]
+   },
+   "assets": [
+    {
+     "name": "터프티드 가죽 3인 소파",
+     "versionId": "677b934b-3847-46f2-84f0-c0f53e9d0e69",
+     "version": 1,
+     "verification": "verified",
+     "fileSha256": "2ad41cd9f363e7294af8e604a8c0a519b200945b630b95220703cf2b3bb43b92"
+    }
+   ],
+   "evidence": [
+    {
+     "evidence": "verified_model",
+     "assetName": "터프티드 가죽 3인 소파",
+     "placementId": "pl-k5y3aa"
+    }
+   ],
+   "qa": {
+    "bbox": [
+     0,
+     1125,
+     772,
+     1599
+    ],
+    "tiles": 4,
+    "width": 2400,
+    "height": 1600,
+    "renderMs": 22289,
+    "grainSigma": 0.14,
+    "preservation": {
+     "ok": true,
+     "sizeMatch": true,
+     "diffOutside": 0
+    },
+    "allowedPixels": 333362,
+    "changedPixels": 333362,
+    "changedInProtected": 0,
+    "changedOutsideAllowed": 0,
+    "occludedFurniturePixels": 0
+   },
+   "release": "internal_test",
+   "renderMs": 23412
+  },
+  {
+   "file": "A_view3.jpg",
+   "variant": "A안 v1",
+   "view": "시점 3",
+   "inputHash": "5f57a76dce3080f4b37caaff990a2bba35b38e8684bb6a84d57c2c14777c50ee",
+   "rendererVersion": "three-r170/compose-v1",
+   "calibration": {
+    "status": "estimated",
+    "camera": {
+     "C": [
+      0.171532007,
+      1.400364473,
+      1.407244518
+     ],
+     "R": [
+      0.993628727998,
+      0.045972452778,
+      -0.102900361919,
+      -0.000193815766,
+      0.913718598144,
+      0.406347493951,
+      0.112702765419,
+      -0.403738599827,
+      0.907905958608
+     ],
+     "f": 2000,
+     "cx": 1200,
+     "cy": 800,
+     "width": 2400,
+     "height": 1600
+    }
+   },
+   "masksRev": 0,
+   "viewAdjust": {
+    "wb": [
+     1,
+     1,
+     1
+    ],
+    "grain": null,
+    "blurPx": 0.6,
+    "exposure": 0
+   },
+   "state": {
+    "lighting": {
+     "ambient": 1,
+     "softness": 0.7,
+     "colorTempK": 5600,
+     "sunIntensity": 1.8,
+     "contactShadow": 0.7,
+     "sunAzimuthDeg": 90,
+     "shadowStrength": 0.45,
+     "sunElevationDeg": 40
+    },
+    "placements": [
+     {
+      "id": "pl-k5y3aa",
+      "dims": {
+       "d": 82,
+       "h": 71,
+       "w": 181
+      },
+      "assetId": "bc63079b-3ffb-4706-b3f8-5ad1847466f0",
+      "position": {
+       "x": 0.4049,
+       "z": 0.35
+      },
+      "nonStandard": false,
+      "rotationDeg": 15,
+      "assetVersionId": "677b934b-3847-46f2-84f0-c0f53e9d0e69",
+      "sizeOptionIndex": 0
+     }
+    ]
+   },
+   "assets": [
+    {
+     "name": "터프티드 가죽 3인 소파",
+     "versionId": "677b934b-3847-46f2-84f0-c0f53e9d0e69",
+     "version": 1,
+     "verification": "verified",
+     "fileSha256": "2ad41cd9f363e7294af8e604a8c0a519b200945b630b95220703cf2b3bb43b92"
+    }
+   ],
+   "evidence": [
+    {
+     "evidence": "verified_model",
+     "assetName": "터프티드 가죽 3인 소파",
+     "placementId": "pl-k5y3aa"
+    }
+   ],
+   "qa": {
+    "bbox": [
+     0,
+     818,
+     2399,
+     1599
+    ],
+    "tiles": 4,
+    "width": 2400,
+    "height": 1600,
+    "renderMs": 22542,
+    "grainSigma": 0.33,
+    "preservation": {
+     "ok": true,
+     "sizeMatch": true,
+     "diffOutside": 0
+    },
+    "allowedPixels": 1545420,
+    "changedPixels": 1545420,
+    "changedInProtected": 0,
+    "changedOutsideAllowed": 0,
+    "occludedFurniturePixels": 0
+   },
+   "release": "internal_test",
+   "renderMs": 23870
+  },
+  {
+   "file": "B_view1.jpg",
+   "variant": "B안 v1",
+   "view": "시점 1",
+   "inputHash": "ed4fb46d9bde1767c16d972955bd983452bfe4879cca6d52aec5852d7d722dca",
+   "rendererVersion": "three-r170/compose-v1",
+   "calibration": {
+    "status": "estimated",
+    "camera": {
+     "C": [
+      0.173419945,
+      1.396712437,
+      1.39560101
+     ],
+     "R": [
+      0.916729440113,
+      0.109956480682,
+      -0.384079036118,
+      -0.000020616801,
+      0.961391626671,
+      0.275183828999,
+      0.399508614681,
+      -0.252261199006,
+      0.881338274598
+     ],
+     "f": 1000,
+     "cx": 1200,
+     "cy": 800,
+     "width": 2400,
+     "height": 1600
+    }
+   },
+   "masksRev": 0,
+   "viewAdjust": {
+    "wb": [
+     1,
+     1,
+     1
+    ],
+    "grain": null,
+    "blurPx": 0.6,
+    "exposure": 0
+   },
+   "state": {
+    "lighting": {
+     "ambient": 1,
+     "softness": 0.7,
+     "colorTempK": 5600,
+     "sunIntensity": 1.8,
+     "contactShadow": 0.7,
+     "sunAzimuthDeg": 90,
+     "shadowStrength": 0.45,
+     "sunElevationDeg": 40
+    },
+    "placements": [
+     {
+      "id": "pl-k5y3aa",
+      "dims": {
+       "d": 93,
+       "h": 112,
+       "w": 273
+      },
+      "assetId": "ca769808-27a5-40f2-a884-547a353717f2",
+      "position": {
+       "x": 0.1,
+       "z": 0.52
+      },
+      "nonStandard": false,
+      "rotationDeg": 0,
+      "assetVersionId": "2e3b7dc4-471d-4578-bb7c-17714c1dcc4c",
+      "sizeOptionIndex": 0
+     }
+    ]
+   },
+   "assets": [
+    {
+     "name": "빅토리안 가죽 소파",
+     "versionId": "2e3b7dc4-471d-4578-bb7c-17714c1dcc4c",
+     "version": 1,
+     "verification": "verified",
+     "fileSha256": "8ce396ccf159ae43c814d600edec396837160e0229ba5b400243f9c654255923"
+    }
+   ],
+   "evidence": [
+    {
+     "evidence": "verified_model",
+     "assetName": "빅토리안 가죽 소파",
+     "placementId": "pl-k5y3aa"
+    }
+   ],
+   "qa": {
+    "bbox": [
+     0,
+     742,
+     2129,
+     1599
+    ],
+    "tiles": 4,
+    "width": 2400,
+    "height": 1600,
+    "renderMs": 28401,
+    "grainSigma": 0.33,
+    "preservation": {
+     "ok": true,
+     "sizeMatch": true,
+     "diffOutside": 0
+    },
+    "allowedPixels": 1551243,
+    "changedPixels": 1551243,
+    "changedInProtected": 0,
+    "changedOutsideAllowed": 0,
+    "occludedFurniturePixels": 0
+   },
+   "release": "internal_test",
+   "renderMs": 29829
+  },
+  {
+   "file": "B_view2.jpg",
+   "variant": "B안 v1",
+   "view": "시점 2",
+   "inputHash": "122444e2c17e2fb7c75b206cd521de3e4532a9ca344308b4655ecc9fb4466045",
+   "rendererVersion": "three-r170/compose-v1",
+   "calibration": {
+    "status": "estimated",
+    "camera": {
+     "C": [
+      0.169927836,
+      1.399201118,
+      1.40601471
+     ],
+     "R": [
+      0.250188196672,
+      0.233982010129,
+      -0.939498954327,
+      -0.000674753354,
+      0.97040096713,
+      0.241498463144,
+      0.968196989746,
+      -0.059786134923,
+      0.242940748161
+     ],
+     "f": 1200,
+     "cx": 1200,
+     "cy": 800,
+     "width": 2400,
+     "height": 1600
+    }
+   },
+   "masksRev": 0,
+   "viewAdjust": {
+    "wb": [
+     1,
+     1,
+     1
+    ],
+    "grain": null,
+    "blurPx": 0.6,
+    "exposure": 0
+   },
+   "state": {
+    "lighting": {
+     "ambient": 1,
+     "softness": 0.7,
+     "colorTempK": 5600,
+     "sunIntensity": 1.8,
+     "contactShadow": 0.7,
+     "sunAzimuthDeg": 90,
+     "shadowStrength": 0.45,
+     "sunElevationDeg": 40
+    },
+    "placements": [
+     {
+      "id": "pl-k5y3aa",
+      "dims": {
+       "d": 93,
+       "h": 112,
+       "w": 273
+      },
+      "assetId": "ca769808-27a5-40f2-a884-547a353717f2",
+      "position": {
+       "x": 0.1,
+       "z": 0.52
+      },
+      "nonStandard": false,
+      "rotationDeg": 0,
+      "assetVersionId": "2e3b7dc4-471d-4578-bb7c-17714c1dcc4c",
+      "sizeOptionIndex": 0
+     }
+    ]
+   },
+   "assets": [
+    {
+     "name": "빅토리안 가죽 소파",
+     "versionId": "2e3b7dc4-471d-4578-bb7c-17714c1dcc4c",
+     "version": 1,
+     "verification": "verified",
+     "fileSha256": "8ce396ccf159ae43c814d600edec396837160e0229ba5b400243f9c654255923"
+    }
+   ],
+   "evidence": [
+    {
+     "evidence": "verified_model",
+     "assetName": "빅토리안 가죽 소파",
+     "placementId": "pl-k5y3aa"
+    }
+   ],
+   "qa": {
+    "bbox": [
+     0,
+     908,
+     1112,
+     1599
+    ],
+    "tiles": 4,
+    "width": 2400,
+    "height": 1600,
+    "renderMs": 25255,
+    "grainSigma": 0.14,
+    "preservation": {
+     "ok": true,
+     "sizeMatch": true,
+     "diffOutside": 0
+    },
+    "allowedPixels": 706572,
+    "changedPixels": 706572,
+    "changedInProtected": 0,
+    "changedOutsideAllowed": 0,
+    "occludedFurniturePixels": 0
+   },
+   "release": "internal_test",
+   "renderMs": 26444
+  },
+  {
+   "file": "B_view3.jpg",
+   "variant": "B안 v1",
+   "view": "시점 3",
+   "inputHash": "c0071b361114eba7ee29554f254dd69d98d509aec84a866b204290e811e63aa0",
+   "rendererVersion": "three-r170/compose-v1",
+   "calibration": {
+    "status": "estimated",
+    "camera": {
+     "C": [
+      0.171532007,
+      1.400364473,
+      1.407244518
+     ],
+     "R": [
+      0.993628727998,
+      0.045972452778,
+      -0.102900361919,
+      -0.000193815766,
+      0.913718598144,
+      0.406347493951,
+      0.112702765419,
+      -0.403738599827,
+      0.907905958608
+     ],
+     "f": 2000,
+     "cx": 1200,
+     "cy": 800,
+     "width": 2400,
+     "height": 1600
+    }
+   },
+   "masksRev": 0,
+   "viewAdjust": {
+    "wb": [
+     1,
+     1,
+     1
+    ],
+    "grain": null,
+    "blurPx": 0.6,
+    "exposure": 0
+   },
+   "state": {
+    "lighting": {
+     "ambient": 1,
+     "softness": 0.7,
+     "colorTempK": 5600,
+     "sunIntensity": 1.8,
+     "contactShadow": 0.7,
+     "sunAzimuthDeg": 90,
+     "shadowStrength": 0.45,
+     "sunElevationDeg": 40
+    },
+    "placements": [
+     {
+      "id": "pl-k5y3aa",
+      "dims": {
+       "d": 93,
+       "h": 112,
+       "w": 273
+      },
+      "assetId": "ca769808-27a5-40f2-a884-547a353717f2",
+      "position": {
+       "x": 0.1,
+       "z": 0.52
+      },
+      "nonStandard": false,
+      "rotationDeg": 0,
+      "assetVersionId": "2e3b7dc4-471d-4578-bb7c-17714c1dcc4c",
+      "sizeOptionIndex": 0
+     }
+    ]
+   },
+   "assets": [
+    {
+     "name": "빅토리안 가죽 소파",
+     "versionId": "2e3b7dc4-471d-4578-bb7c-17714c1dcc4c",
+     "version": 1,
+     "verification": "verified",
+     "fileSha256": "8ce396ccf159ae43c814d600edec396837160e0229ba5b400243f9c654255923"
+    }
+   ],
+   "evidence": [
+    {
+     "evidence": "verified_model",
+     "assetName": "빅토리안 가죽 소파",
+     "placementId": "pl-k5y3aa"
+    }
+   ],
+   "qa": {
+    "bbox": [
+     0,
+     371,
+     2399,
+     1599
+    ],
+    "tiles": 4,
+    "width": 2400,
+    "height": 1600,
+    "renderMs": 29565,
+    "grainSigma": 0.33,
+    "preservation": {
+     "ok": true,
+     "sizeMatch": true,
+     "diffOutside": 0
+    },
+    "allowedPixels": 2686069,
+    "changedPixels": 2686069,
+    "changedInProtected": 0,
+    "changedOutsideAllowed": 0,
+    "occludedFurniturePixels": 0
+   },
+   "release": "internal_test",
+   "renderMs": 31308
+  }
+ ]
+}

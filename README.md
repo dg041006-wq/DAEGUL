@@ -6,6 +6,10 @@
 > **현재 상태:** 운영 배포 미완료(호스팅 계정 필요) · 카카오 상담톡 미연동 · 실제 AI 호출 미검증(API 키 필요).
 > 정확한 구분과 검증 결과는 [`docs/STATUS.md`](docs/STATUS.md), 배포 절차는 [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
+## 스타일링 스튜디오 (`/studio`)
+
+인테리어 업체·스테이신 팀용 가구 배치 시안 도구. 현장 사진에 실제 제품 3D 모델을 놓고 여러 시점에서 같은 위치로 합성, A/B 안을 버전 고정 링크로 공유·승인. 구현·검증 범위와 한계는 [`docs/STUDIO.md`](docs/STUDIO.md), 결과 사진·재현 근거는 [`docs/studio-results/`](docs/studio-results/).
+
 ## 주요 기능
 
 - **대표실**: 오늘 우선순위, 답변 대기, 결정이 필요한 일, 마감 임박, 최근 보고, AI 직원 상태(처리 중·새 보고·실패)
@@ -25,7 +29,7 @@ TypeScript · Fastify 5 · PostgreSQL 14+ · React 18(Vite) · PostgreSQL 기반
 src/server/  db/migrations · ingest(수신) · integrations(공급사 어댑터) · lib(events, push, outbound, tasks, sheetImport, sheetsSync, realtime)
              analytics · ai(직원·분석·도구) · jobs(reports, ideas, automation, queue) · routes
 src/web/     pages(대표실, 상담함, 일정·작업, 고객, 정산, AI 직원, 보고서, 경영 제안, 설정 …) · lib(api, realtime, pwa)
-test/        자동 테스트 (51개)
+test/        자동 테스트 (81개: OFFICE 51 + 스튜디오 30)
 docs/        STATUS · DEPLOY · SHEET_MAPPING · INTEGRATION · OPERATIONS · IMPORT_FORMAT
 ```
 

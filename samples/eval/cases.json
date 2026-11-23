@@ -1,0 +1,48 @@
+{
+  "purpose": "실물 비교·범용 AI 기준선 평가 사례 정의. 결과 칸이 null이면 미실행.",
+  "status": "기하 검증용 사례만 준비됨. 실물 배치 사진(같은 삼각대 위치에서 실제 제품을 놓고 찍은 사진)이 아직 없어 품질 검증은 미실행.",
+  "rubric": {
+    "reviewDecision": ["send", "send_after_fix", "cannot_send"],
+    "criticalDefects": ["floating_feet", "double_edge", "product_material_changed", "fake_reflection", "room_structure_changed", "product_identity_changed"],
+    "productChecklist": ["다리 개수·형태", "프레임 형태", "봉제선·터프팅 개수", "팔걸이 형태", "색상", "소재 질감"],
+    "geometry": "긴 변 2000px 기준 핵심 접점(다리·모서리) 오차 중앙값/최댓값",
+    "efficiency": "첫 시안, 소파 치수·위치 변경, 결과 전달까지 사람 작업 시간(분)과 자동 처리 시간 분리 기록"
+  },
+  "baselineProtocol": {
+    "tool": "ChatGPT(이미지 편집) 또는 범용 이미지 편집 모델",
+    "inputs": "같은 방 사진 + 같은 가구 참조 이미지 + 배치 설명(위치·방향·치수)",
+    "timebox": "사례당 15분, 수정 요청 최대 3회",
+    "record": "프롬프트 원문, 수정 횟수, 소요 시간, 출력 해상도, 구조 변경 여부(문·창·바닥 줄눈·콘센트), 제품 체크리스트 결과",
+    "inputDifference": "스테이신 3D 경로는 전용 3D 에셋을 사용 — 결과표에 입력 차이를 함께 적는다"
+  },
+  "cases": [
+    {
+      "id": "pano-room-sofa02",
+      "kind": "geometry_only",
+      "photo": "samples/room/view1.jpg, view2.jpg, view3.jpg (실제 촬영 파노라마의 원근 크롭, CC0)",
+      "asset": "Poly Haven sofa_02 (CC0) GLB",
+      "calibration": "기준점 P1~P9 (파노라마에서 지정, 문 높이 2.0m 가정 스케일)",
+      "expected": "ground_truth.json의 정답 카메라로 배치 투영 위치 비교",
+      "protectedChecks": ["콘센트 2개", "걸레받이 선", "커튼 끝단", "창틀"],
+      "results": {
+        "geometryMedianPx": "1.6~2.2 (시뮬레이션 클릭 ±1px, EXIF 초점 사용) — test/studio.geometry.test.ts",
+        "outsideMaskChangedPixels": 0,
+        "realPhotoComparison": null,
+        "baseline": null,
+        "humanReview": null
+      }
+    },
+    {
+      "id": "real-pair-TODO-1",
+      "kind": "quality",
+      "need": "자연광 거실, 삼각대 고정, 빈 방 사진 + 같은 위치에서 실제 소파를 놓은 사진, 소파의 제조사 3D 모델 또는 실측 치수·사진 4방향",
+      "results": { "realPhotoComparison": null, "baseline": null, "humanReview": null }
+    },
+    {
+      "id": "real-pair-TODO-2",
+      "kind": "quality",
+      "need": "혼합광 숙소(조명+창광), 광각 가장자리에 가구, 전경 가림(문틀) 포함",
+      "results": { "realPhotoComparison": null, "baseline": null, "humanReview": null }
+    }
+  ]
+}
