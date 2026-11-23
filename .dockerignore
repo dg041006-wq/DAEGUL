@@ -8,3 +8,7 @@ dist-server
 storage
 *.log
 test
+data
+test-output
+samples/source
+dist-render

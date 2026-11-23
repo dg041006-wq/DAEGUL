@@ -30,6 +30,18 @@ services:
         value: claude-opus-5-5
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false # 구글시트 읽기 전용 연동 시에만
+      # ── 스타일링 스튜디오 ──
+      - key: STUDIO_STORAGE_DIR
+        value: /var/data/studio # 아래 영구 디스크. 컨테이너 파일시스템은 재배포 시 지워짐
+      - key: OPENAI_API_KEY
+        sync: false # 선택: 이미지 편집(경계 보정). 비우면 해당 버튼 비활성
+      - key: STUDIO_IMAGE_MODEL
+        value: gpt-image-2.5-sunburst # 실계정에서 마스크 편집 지원 확인 후 확정
+    # 사진·렌더 결과 비공개 저장(영구 디스크, 유료 인스턴스 필요)
+    disk:
+      name: studio-data
+      mountPath: /var/data
+      sizeGB: 20
 databases:
   - name: stayscene-db
     plan: basic-256mb
