@@ -12,6 +12,7 @@ export default defineConfig({
       SESSION_SECRET: "test-session-secret-test-session-secret",
       ANTHROPIC_API_KEY: "",
       NODE_ENV: "test",
+      STUDIO_STORAGE_DIR: "test-output/storage",
     },
   },
 });

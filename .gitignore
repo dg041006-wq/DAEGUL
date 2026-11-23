@@ -6,3 +6,8 @@ dist-server/
 !.env.example
 storage/
 *.log
+dist-render/
+data/
+samples/source/*.jpg
+test-output/
+samples/source/

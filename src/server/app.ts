@@ -16,6 +16,7 @@ import { aiRoutes } from "./routes/ai.js";
 import { adminRoutes } from "./routes/admin.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { opsRoutes } from "./routes/ops.js";
+import { studioPlugin } from "./studio/plugin.js";
 
 import "./auth/request.js";
 
@@ -47,6 +48,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (req.method !== "GET" && req.method !== "HEAD" && req.headers["x-requested-with"] !== "stayscene") {
       return reply.code(400).send({ error: "잘못된 요청 헤더" });
     }
+    if (req.url.startsWith("/api/studio/")) return; // 스튜디오는 별도 세션(studio/plugin.ts)
     const s = await resolveSession(req.cookies[SESSION_COOKIE]);
     if (s) req.scope = s.scope;
   });
@@ -74,6 +76,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(webhookRoutes);
   await app.register(opsRoutes);
   await app.register(setupRoutes);
+  await app.register(studioPlugin);
 
   // 상태 확인: DB 연결과 워커 동작 여부 (내부 정보·비밀값 미포함)
   app.get("/api/health", async (_req, reply) => {
@@ -94,6 +97,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await app.register(fastifyStatic, { root: webDir, wildcard: false });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith("/api/")) return reply.code(404).send({ error: "Not found" });
+      if (req.url.startsWith("/studio") || req.url.startsWith("/s/")) return reply.sendFile("studio.html");
       return reply.sendFile("index.html");
     });
   }
