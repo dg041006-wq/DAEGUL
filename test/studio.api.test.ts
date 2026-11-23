@@ -449,3 +449,59 @@ describe("상담 요청·운영", () => {
     expect(rr.body[0].code).toBe("not_calibrated");
   });
 });
+
+describe("이미지 편집 API 어댑터 (로컬 가짜 공급자 — 실제 OpenAI 호출 아님)", () => {
+  it("키가 없으면 실행하지 않고, 공급자가 사진 전체를 바꿔 보내도 허용 영역 밖은 원본으로 복원된다", async () => {
+    const jobs = (await A.get(`/api/studio/renders?roomId=${roomId}`)).body.filter((j: any) => j.status === "done" && j.photoId === photos[0].id);
+    const job = jobs[0];
+    delete process.env.OPENAI_API_KEY;
+    expect((await A.post(`/api/studio/renders/${job.id}/ai-edit`, { confirmSend: true })).status).toBe(503);
+    const http = await import("node:http");
+    let seenAuth = "", seenBytes = 0;
+    const srv = http.createServer(async (req, res) => {
+      seenAuth = String(req.headers.authorization);
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      seenBytes = Buffer.concat(chunks).length;
+      // 모델이 마스크를 무시하고 사진 전체를 바꾼 상황을 흉내: 전부 빨간색
+      const img = await sharp({ create: { width: 1536, height: 1024, channels: 3, background: "#ff0000" } }).png().toBuffer();
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ data: [{ b64_json: img.toString("base64") }] }));
+    });
+    await new Promise<void>((r) => srv.listen(0, r));
+    const port = (srv.address() as any).port;
+    process.env.OPENAI_API_KEY = "sk-test-not-real";
+    process.env.OPENAI_BASE_URL = `http://127.0.0.1:${port}`;
+    try {
+      // 한도 0이면 거부
+      expect((await A.post(`/api/studio/renders/${job.id}/ai-edit`, { confirmSend: true })).status).toBe(429);
+      await q(`UPDATE studio_workspaces SET limits = limits || '{"monthlyAiEdits":5}'::jsonb WHERE name='A인테리어'`);
+      const r = await A.post(`/api/studio/renders/${job.id}/ai-edit`, { confirmSend: true });
+      expect(r.status).toBe(200);
+      expect(seenAuth).toBe("Bearer sk-test-not-real");
+      expect(seenBytes).toBeGreaterThan(1000);
+      expect(r.body.qa.changedOutsideAllowed).toBe(0);
+      expect(r.body.qa.rejectedOutsidePixels).toBeGreaterThan(1_000_000); // 마스크 밖 변경은 모두 거부됨
+      expect(r.body.qa.productCorePixelsKept).toBeGreaterThan(10000); // 가구 내부는 3D 렌더 그대로
+      // 결과 마스터: 허용 영역 밖 = 원본
+      const ai = await A.get(`/api/studio/renders/${job.id}/download?type=master&variant=ai`);
+      const orig = await A.get(`/api/studio/files/${photos[0].master_file_id}`);
+      const allowed = await A.get(`/api/studio/files/${job.outputs.allowedMaskFileId}`);
+      const a = await sharp(ai.raw).raw().toBuffer(), b = await sharp(orig.raw).raw().toBuffer(), m = await sharp(allowed.raw).greyscale().raw().toBuffer();
+      let diff = 0;
+      for (let p = 0; p < m.length; p++) if (m[p] <= 127 && (a[p * 3] !== b[p * 3] || a[p * 3 + 1] !== b[p * 3 + 1] || a[p * 3 + 2] !== b[p * 3 + 2])) diff++;
+      expect(diff).toBe(0);
+      // 공급자 전송 기록: 키·이미지 본문 없이 파일 id와 용도만
+      const plog = await q1<any>(`SELECT sent, result FROM studio_provider_log ORDER BY id DESC LIMIT 1`);
+      expect(plog.result).toBe("ok");
+      expect(JSON.stringify(plog.sent)).not.toMatch(/sk-|base64|b64/);
+      // 원래 3D 렌더 결과는 그대로 보존
+      expect((await A.get(`/api/studio/renders/${job.id}/download?type=master`)).status).toBe(200);
+      log.push(`[AI 보정·가짜 공급자] 수용 ${r.body.qa.acceptedPixels}px, 마스크 밖 변경 거부 ${r.body.qa.rejectedOutsidePixels}px, 가구 내부 보존 ${r.body.qa.productCorePixelsKept}px, 허용 밖 최종 변경 ${r.body.qa.changedOutsideAllowed}`);
+    } finally {
+      srv.close();
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_BASE_URL;
+    }
+  }, 60000);
+});

@@ -12,14 +12,15 @@
     "dev:api": "tsx watch src/server/index.ts",
     "dev:worker": "tsx watch src/server/worker.ts",
     "dev:web": "vite",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && node scripts/build-render.mjs && tsc -p tsconfig.server.json",
     "start": "node dist-server/server/index.js",
     "start:worker": "node dist-server/server/worker.js",
     "db:migrate": "tsx src/server/db/migrate.ts",
     "db:seed-demo": "tsx src/server/seed/demo.ts",
     "admin:create-owner": "tsx src/server/scripts/createOwner.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "studio:create-user": "tsx src/server/scripts/createStudioUser.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

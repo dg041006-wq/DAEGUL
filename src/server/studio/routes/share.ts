@@ -86,7 +86,7 @@ export async function studioShareRoutes(app: FastifyInstance) {
     for (const it of sh.items) {
       const vv = await q1<any>(`SELECT id, version, state, locked_reason, approved_at FROM studio_variant_versions WHERE id=$1 AND workspace_id=$2`, [it.variantVersionId, sh.workspace_id]);
       const jobs = await q<any>(
-        `SELECT j.id, j.evidence, j.outputs, j.photo_id, p.label, p.width, p.height FROM studio_render_jobs j JOIN studio_photos p ON p.id=j.photo_id WHERE j.id = ANY($1) AND j.workspace_id=$2 AND j.status='done'`,
+        `SELECT j.id, j.evidence, j.outputs, j.photo_id, p.label, p.width, p.height FROM studio_render_jobs j JOIN studio_photos p ON p.id=j.photo_id WHERE j.id = ANY($1) AND j.workspace_id=$2 AND j.status='done' ORDER BY p.sort, p.created_at`,
         [it.renderJobIds, sh.workspace_id],
       );
       items.push({

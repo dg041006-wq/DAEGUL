@@ -9,7 +9,9 @@ import { putFile, readFile } from "../storage.js";
 import { recalibratePhoto, recalibrateRoom } from "../calibration.js";
 import { studioConfig } from "../config.js";
 import { findChromium } from "../renderer.js";
+import { DEFAULT_LIGHTING } from "../../../shared/studio/variant.js";
 import { openSampleProject } from "../sample.js";
+import { createVariant } from "../variants.js";
 
 const attempts = new Map<string, { n: number; until: number }>();
 
@@ -102,7 +104,8 @@ export async function studioCoreRoutes(app: FastifyInstance) {
     const s = studioScope(req);
     const b = z.object({ name: z.string().min(1).max(100), clientName: z.string().max(100).optional(), roomName: z.string().max(60).optional() }).parse(req.body);
     const p = await q1<any>(`INSERT INTO studio_projects(workspace_id, name, client_name, created_by) VALUES ($1,$2,$3,$4) RETURNING *`, [s.workspaceId, b.name, b.clientName ?? null, s.userId]);
-    const room = await q1<any>(`INSERT INTO studio_rooms(project_id, workspace_id, name) VALUES ($1,$2,$3) RETURNING *`, [p.id, s.workspaceId, b.roomName ?? "거실"]);
+    const room = await q1<any>(`INSERT INTO studio_rooms(project_id, workspace_id, name, lighting) VALUES ($1,$2,$3,$4) RETURNING *`, [p.id, s.workspaceId, b.roomName ?? "거실", DEFAULT_LIGHTING]);
+    await createVariant(s, room.id, "A안", null, undefined as any);
     await logEvent(s, "project_created", {}, p.id);
     return { ...p, firstRoomId: room.id };
   });
@@ -133,7 +136,9 @@ export async function studioCoreRoutes(app: FastifyInstance) {
     const s = studioScope(req);
     const p = await getProject(s, (req.params as any).id);
     const b = z.object({ name: z.string().min(1).max(60) }).parse(req.body);
-    return q1(`INSERT INTO studio_rooms(project_id, workspace_id, name) VALUES ($1,$2,$3) RETURNING *`, [p.id, s.workspaceId, b.name]);
+    const room = await q1<any>(`INSERT INTO studio_rooms(project_id, workspace_id, name, lighting) VALUES ($1,$2,$3,$4) RETURNING *`, [p.id, s.workspaceId, b.name, DEFAULT_LIGHTING]);
+    await createVariant(s, room.id, "A안", null, undefined as any);
+    return room;
   });
 
   // ───────── 방 ─────────

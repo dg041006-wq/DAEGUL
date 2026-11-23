@@ -29,7 +29,8 @@ export const studioConfig = {
     return process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
   },
   get openaiImageModel() {
-    return process.env.STUDIO_IMAGE_MODEL || "gpt-image-1";
+    // gpt-image-1은 2026-10-23 종료(공식 문서). 마스크 편집 예시 모델 기준 기본값 — 실계정에서 확인 필요
+    return process.env.STUDIO_IMAGE_MODEL || "gpt-image-2.5-sunburst";
   },
   rendererVersion: "three-r170/compose-v1",
 };

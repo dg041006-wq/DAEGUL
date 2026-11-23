@@ -6,6 +6,7 @@ import { q, q1, tx } from "../../db/pool.js";
 import { getPhoto, getProject, getRoom, getVariant, getVariantVersion, HttpError, logEvent, studioScope, type StudioScope } from "../auth.js";
 import { createVariant, lockVersion, saveDraft, stateSchema } from "../variants.js";
 import { requestRender, releaseStatus } from "../renderJobs.js";
+import { runAiEdit } from "../aiEdit.js";
 import { getFileRow, readFile } from "../storage.js";
 import { makeZip } from "../zip.js";
 import { EVIDENCE_LABEL, RELEASE_LABEL, type VariantState } from "../../../shared/studio/variant.js";
@@ -23,7 +24,7 @@ const pub = (j: any) => ({
   assetVersions: Object.values(j.inputs?.assets ?? {}).map((a: any) => ({ assetId: a.assetId, versionId: a.versionId, version: a.version, name: a.name, kind: a.kind, verification: a.verification })),
   calibStatus: j.inputs?.photo?.calibStatus,
   masksRev: j.inputs?.photo?.masksRev,
-  outputs: j.outputs ? { masterFileId: j.outputs.masterFileId, deliveryFileId: j.outputs.deliveryFileId, previewFileId: j.outputs.previewFileId, alphaFileId: j.outputs.alphaFileId, shadowFileId: j.outputs.shadowFileId, allowedMaskFileId: j.outputs.allowedMaskFileId, qa: j.outputs.qa } : null,
+  outputs: j.outputs ? { masterFileId: j.outputs.masterFileId, deliveryFileId: j.outputs.deliveryFileId, previewFileId: j.outputs.previewFileId, alphaFileId: j.outputs.alphaFileId, shadowFileId: j.outputs.shadowFileId, allowedMaskFileId: j.outputs.allowedMaskFileId, qa: j.outputs.qa, aiEdit: j.outputs.aiEdit ?? null } : null,
   errorCode: j.error_code,
   errorDetail: j.error_detail,
   attempts: j.attempts,
@@ -59,6 +60,8 @@ export async function productRows(s: StudioScope | { workspaceId: string }, stat
   }
   return rows;
 }
+
+const asciiName = (n: string) => n.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
 
 function csv(rows: any[]) {
   const head = ["제품명", "브랜드", "모델", "색상", "소재", "치수", "옵션", "에셋 버전", "제품 확인 상태", "시점별 근거", "위치", "출처 링크"];
@@ -183,17 +186,29 @@ export async function studioVariantRoutes(app: FastifyInstance) {
     return { deduped: r.deduped, job: pub(r.job) };
   });
 
+  // 선택: 이미지 편집 API로 경계·접지만 보정 (원본 3D 렌더는 비교 기준으로 보존)
+  app.post("/api/studio/renders/:id/ai-edit", async (req) => {
+    const s = studioScope(req);
+    const j = await ownedJob(s, (req.params as any).id);
+    const b = z.object({ confirmSend: z.literal(true) }).parse(req.body ?? {});
+    void b;
+    const r = await runAiEdit(j);
+    await logEvent(s, "ai_edit", { jobId: j.id }, j.project_id);
+    return r;
+  });
+
   app.get("/api/studio/renders/:id/download", async (req, reply) => {
     const s = studioScope(req);
     const j = await ownedJob(s, (req.params as any).id);
     if (j.status !== "done") throw new HttpError(409, "완료된 렌더만 내려받을 수 있습니다.");
     const type = (req.query as any).type === "delivery" ? "delivery" : "master";
-    const f = await getFileRow(type === "delivery" ? j.outputs.deliveryFileId : j.outputs.masterFileId);
+    const ai = (req.query as any).variant === "ai" && j.outputs.aiEdit;
+    const f = await getFileRow(ai ? (type === "delivery" ? j.outputs.aiEdit.fileIds.delivery : j.outputs.aiEdit.fileIds.master) : type === "delivery" ? j.outputs.deliveryFileId : j.outputs.masterFileId);
     if (!f || f.workspace_id !== s.workspaceId) throw new HttpError(404, "파일이 없습니다.");
     const ph = await q1<any>(`SELECT label FROM studio_photos WHERE id=$1`, [j.photo_id]);
     const vv = await q1<any>(`SELECT vv.version, v.name FROM studio_variant_versions vv JOIN studio_variants v ON v.id=vv.variant_id WHERE vv.id=$1`, [j.variant_version_id]);
     const fname = `${vv.name}_v${vv.version}_${ph?.label ?? "view"}_${type === "master" ? "master.png" : "delivery.jpg"}`;
-    reply.header("content-type", f.mime).header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
+    reply.header("content-type", f.mime).header("content-disposition", `attachment; filename="${asciiName(fname)}"; filename*=UTF-8''${encodeURIComponent(fname)}`);
     await logEvent(s, "download", { type, jobId: j.id }, j.project_id);
     return reply.send(await readFile(f));
   });
@@ -239,7 +254,7 @@ export async function studioVariantRoutes(app: FastifyInstance) {
       views: jobs.map((j) => ({ view: j.label, renderJobId: j.id, evidence: EVIDENCE_LABEL[j.evidence], release: RELEASE_LABEL[j.outputs.release], calibration: j.inputs.photo.calibStatus, assets: Object.values(j.inputs.assets).map((a: any) => `${a.name} v${a.version}`), qa: { changedOutsideAllowed: j.outputs.qa.changedOutsideAllowed, preservation: j.outputs.qa.preservation } })),
     };
     files.push({ name: "근거기록.json", data: Buffer.from(JSON.stringify(manifest, null, 2), "utf8") });
-    reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(`${v.name}_v${vv.version}.zip`)}`);
+    reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="${asciiName(`plan_v${vv.version}.zip`)}"; filename*=UTF-8''${encodeURIComponent(`${v.name}_v${vv.version}.zip`)}`);
     await logEvent(s, "download", { type: "bundle", versionId: vv.id });
     return reply.send(makeZip(files));
   });

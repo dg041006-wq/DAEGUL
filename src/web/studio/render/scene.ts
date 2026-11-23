@@ -41,6 +41,7 @@ export interface SceneSpec {
   lighting: RenderLighting;
   exposure: number; // EV
   envUrl?: string | null; // 환경광용 사진(미리보기 해상도)
+  quality?: "preview" | "final";
 }
 
 export function kelvinToRGB(k: number): THREE.Color {
@@ -248,11 +249,12 @@ export async function buildScene(spec: SceneSpec): Promise<BuiltScene> {
   sc.bottom = -ext;
   sc.near = 0.5;
   sc.far = 30;
-  sun.shadow.mapSize.set(4096, 4096);
+  const preview = spec.quality === "preview";
+  sun.shadow.mapSize.set(preview ? 2048 : 4096, preview ? 2048 : 4096);
   sun.shadow.bias = -0.0002;
   sun.shadow.normalBias = 0.01;
   sun.shadow.radius = 1 + L.softness * 18;
-  sun.shadow.blurSamples = 24;
+  sun.shadow.blurSamples = preview ? 12 : 24;
   scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0xf4f1ec, 0x6b5a4c, L.ambient * 1.6);
   scene.add(hemi);

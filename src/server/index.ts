@@ -16,3 +16,9 @@ if (process.env.RUN_WORKER_IN_PROCESS === "true") {
   });
   startWorkerLoop();
 }
+
+// 스타일링 스튜디오 렌더 워커(헤드리스 Chromium). STUDIO_RENDER_IN_PROCESS=false면 별도 워커 프로세스에서 실행
+if (process.env.STUDIO_RENDER_IN_PROCESS !== "false" && config.env !== "test") {
+  const { startStudioRenderLoop } = await import("./studio/renderJobs.js");
+  startStudioRenderLoop();
+}
